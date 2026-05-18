@@ -134,28 +134,29 @@ export const code = {
   escape: false,
 };
 export const textColor = {
-  open: mark => `<span style="color: ${mark.attrs.color}">`,
+  open: (_state, mark) => `<span style="color: ${mark.attrs.color}">`,
   close: '</span>',
   mixable: true,
   expelEnclosingWhitespace: true,
   escape: false,
 };
 export const backgroundColor = {
-  open: mark => `<span style="background-color: ${mark.attrs.backgroundColor}">`,
+  open: (_state, mark) =>
+    `<span style="background-color: ${mark.attrs.backgroundColor}">`,
   close: '</span>',
   mixable: true,
   expelEnclosingWhitespace: true,
   escape: false,
 };
 export const fontSize = {
-  open: mark => `<span style="font-size: ${mark.attrs.size}">`,
+  open: (_state, mark) => `<span style="font-size: ${mark.attrs.size}">`,
   close: '</span>',
   mixable: true,
   expelEnclosingWhitespace: true,
   escape: false,
 };
 export const fontFamily = {
-  open: mark => `<span style="font-family: ${mark.attrs.family}">`,
+  open: (_state, mark) => `<span style="font-family: ${mark.attrs.family}">`,
   close: '</span>',
   mixable: true,
   expelEnclosingWhitespace: true,
