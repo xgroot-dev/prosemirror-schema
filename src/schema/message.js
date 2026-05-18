@@ -103,5 +103,65 @@ export const messageSchema = new Schema({
       ],
       toDOM: () => ['u', 0],
     },
+    textColor: {
+      attrs: { color: {} },
+      parseDOM: [
+        {
+          tag: 'span[style*="color"]',
+          getAttrs: dom => {
+            const color = dom.style.color;
+            return color ? { color } : false;
+          },
+        },
+      ],
+      toDOM: mark => ['span', { style: `color: ${mark.attrs.color}` }, 0],
+    },
+    backgroundColor: {
+      attrs: { backgroundColor: {} },
+      parseDOM: [
+        {
+          tag: 'span[style*="background-color"]',
+          getAttrs: dom => {
+            const backgroundColor = dom.style.backgroundColor;
+            return backgroundColor ? { backgroundColor } : false;
+          },
+        },
+      ],
+      toDOM: mark => [
+        'span',
+        { style: `background-color: ${mark.attrs.backgroundColor}` },
+        0,
+      ],
+    },
+    fontSize: {
+      attrs: { size: {} },
+      parseDOM: [
+        {
+          tag: 'span[style*="font-size"]',
+          getAttrs: dom => {
+            const size = dom.style.fontSize;
+            return size ? { size } : false;
+          },
+        },
+      ],
+      toDOM: mark => ['span', { style: `font-size: ${mark.attrs.size}` }, 0],
+    },
+    fontFamily: {
+      attrs: { family: {} },
+      parseDOM: [
+        {
+          tag: 'span[style*="font-family"]',
+          getAttrs: dom => {
+            const family = dom.style.fontFamily;
+            return family ? { family } : false;
+          },
+        },
+      ],
+      toDOM: mark => [
+        'span',
+        { style: `font-family: ${mark.attrs.family}` },
+        0,
+      ],
+    },
   },
 });

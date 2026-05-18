@@ -18,6 +18,10 @@ import {
   underline,
   link,
   code,
+  textColor,
+  backgroundColor,
+  fontSize,
+  fontFamily,
 } from './serializer';
 
 export const MessageMarkdownSerializer = new MarkdownSerializerBase(
@@ -41,5 +45,9 @@ export const MessageMarkdownSerializer = new MarkdownSerializerBase(
     underline,
     link,
     code,
+    textColor,
+    backgroundColor,
+    fontSize,
+    fontFamily,
   }
 );

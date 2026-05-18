@@ -613,6 +613,169 @@ const showHeadingPicker = (view, schema, t, anchorEl) => {
   }, 0);
 };
 
+// Font-size presets — kept short so the menu remains compact. `key` doubles as
+// the i18n suffix and `value` is the CSS font-size written into the mark.
+const FONT_SIZE_PRESETS = [
+  { key: "XS", label: "Small", value: "12px" },
+  { key: "SM", label: "Medium small", value: "14px" },
+  { key: "MD", label: "Default", value: "16px" },
+  { key: "LG", label: "Large", value: "18px" },
+  { key: "XL", label: "Extra large", value: "22px" },
+  { key: "XXL", label: "Huge", value: "28px" },
+];
+
+const showFontSizePicker = (
+  view,
+  markType,
+  t,
+  attachTooltip,
+  detachTooltip,
+  anchorEl
+) => {
+  document
+    .querySelectorAll(".pm-font-size-popup")
+    .forEach((el) => el.remove());
+
+  const popup = document.createElement("div");
+  popup.className = "pm-font-size-popup";
+  const rect = anchorEl.getBoundingClientRect();
+  popup.style.cssText = [
+    "position: fixed",
+    `top: ${rect.bottom + 4}px`,
+    `left: ${rect.left}px`,
+    "z-index: 9999",
+    "background: rgb(var(--solid-1, 255 255 255))",
+    "border: 1px solid rgba(0,0,0,0.12)",
+    "border-radius: 12px",
+    "padding: 4px",
+    "box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.05)",
+    "min-width: 160px",
+  ].join(";");
+
+  const tooltipAnchors = [];
+  const closePopup = () => {
+    if (typeof detachTooltip === "function") {
+      tooltipAnchors.forEach((el) => detachTooltip(el));
+    }
+    popup.remove();
+  };
+
+  const applySize = (size) => {
+    const { from, to, empty } = view.state.selection;
+    let tr = view.state.tr;
+    if (size === null) {
+      tr = empty
+        ? tr.removeStoredMark(markType)
+        : tr.removeMark(from, to, markType);
+    } else if (empty) {
+      tr = tr.addStoredMark(markType.create({ size }));
+    } else {
+      tr = tr
+        .removeMark(from, to, markType)
+        .addMark(from, to, markType.create({ size }));
+    }
+    view.dispatch(tr);
+    view.focus();
+    closePopup();
+  };
+
+  FONT_SIZE_PRESETS.forEach((item) => {
+    const row = document.createElement("div");
+    row.style.cssText = [
+      "padding: 6px 12px",
+      "cursor: pointer",
+      "border-radius: 8px",
+      `font-size: ${item.value}`,
+      "line-height: 1.2",
+      "color: inherit",
+      "transition: background-color 0.1s",
+    ].join(";");
+    row.textContent = tr(
+      t,
+      `CONVERSATION.REPLYBOX.EDITOR.FONT_SIZE.${item.key}`,
+      item.label
+    );
+    row.addEventListener("mouseenter", () => {
+      row.style.backgroundColor = "rgba(0,0,0,0.04)";
+    });
+    row.addEventListener("mouseleave", () => {
+      row.style.backgroundColor = "";
+    });
+    row.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      applySize(item.value);
+    });
+    popup.appendChild(row);
+  });
+
+  const clear = document.createElement("div");
+  setTooltip(
+    clear,
+    tr(t, "CONVERSATION.REPLYBOX.EDITOR.CLEAR_FORMATTING", "Clear formatting"),
+    attachTooltip
+  );
+  tooltipAnchors.push(clear);
+  clear.style.cssText = [
+    "margin-top: 4px",
+    "padding: 8px 12px",
+    "border-radius: 8px",
+    "color: #666",
+    "cursor: pointer",
+    "display: flex",
+    "justify-content: center",
+    "align-items: center",
+  ].join(";");
+  clear.innerHTML =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+    '<path d="M3.27 5 2 6.27l6.97 6.97L6.5 19h3l1.57-3.66L16.73 21 18 19.73 3.55 5.27 3.27 5ZM6 5v.18L8.82 8h2.4l-.93 2.15 2.09 2.09L13.32 8H20V5H6Z"/>' +
+    "</svg>";
+  clear.addEventListener("mouseenter", () => {
+    clear.style.backgroundColor = "rgba(0,0,0,0.04)";
+  });
+  clear.addEventListener("mouseleave", () => {
+    clear.style.backgroundColor = "";
+  });
+  clear.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    applySize(null);
+  });
+  popup.appendChild(clear);
+
+  document.body.appendChild(popup);
+
+  setTimeout(() => {
+    const handler = (e) => {
+      if (!popup.contains(e.target)) {
+        closePopup();
+        document.removeEventListener("mousedown", handler);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+  }, 0);
+};
+
+const fontSizeItem = (markType, t, attachTooltip, detachTooltip) =>
+  new MenuItem({
+    title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.FONT_SIZE_LABEL", "Font size"),
+    icon: icons.fontSize,
+    enable() {
+      return true;
+    },
+    run(state, dispatch, view, event) {
+      showFontSizePicker(
+        view,
+        markType,
+        t,
+        attachTooltip,
+        detachTooltip,
+        event.currentTarget
+      );
+      return true;
+    },
+  });
+
 const headingLevelItem = (schema, t) =>
   new MenuItem({
     title: tr(
@@ -678,6 +841,9 @@ const buildMenuOptions = (
           attachTooltip,
           detachTooltip
         )
+      : null,
+    fontSize: schema.marks.fontSize
+      ? fontSizeItem(schema.marks.fontSize, t, attachTooltip, detachTooltip)
       : null,
     headingLevel: schema.nodes.heading
       ? headingLevelItem(schema, t)
