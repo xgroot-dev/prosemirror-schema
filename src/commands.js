@@ -1,7 +1,12 @@
-import { markActive, hasCode } from './utils';
 import { hasParentNodeOfType } from 'prosemirror-utils';
 import { Selection, TextSelection, NodeSelection } from 'prosemirror-state';
-import { mapSlice, canMoveDown, canMoveUp } from './utils';
+import {
+  markActive,
+  hasCode,
+  mapSlice,
+  canMoveDown,
+  canMoveUp,
+} from './utils';
 
 export const applyMarkOnRange = (from, to, removeMark, mark, tr) => {
   // const { schema } = tr.doc.type;

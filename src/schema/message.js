@@ -8,6 +8,7 @@ export const messageSchema = new Schema({
     doc: schema.spec.nodes.get('doc'),
     paragraph: schema.spec.nodes.get('paragraph'),
     blockquote: schema.spec.nodes.get('blockquote'),
+    heading: schema.spec.nodes.get('heading'),
     code_block: schema.spec.nodes.get('code_block'),
     text: schema.spec.nodes.get('text'),
     hard_break: schema.spec.nodes.get('hard_break'),
@@ -91,6 +92,16 @@ export const messageSchema = new Schema({
         },
       ],
       toDOM: () => ['s', 0],
+    },
+    underline: {
+      parseDOM: [
+        { tag: 'u' },
+        {
+          style: 'text-decoration',
+          getAttrs: value => value === 'underline' && null,
+        },
+      ],
+      toDOM: () => ['u', 0],
     },
   },
 });

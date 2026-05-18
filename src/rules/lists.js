@@ -63,7 +63,7 @@ export const insertList = (state, listType, listTypeName, start, end) => {
  */
 function getBulletListInputRules(schema) {
   const asteriskRule = createInputRule(
-    /^\s*([\*\-]) $/,
+    /^\s*([*-]) $/,
     schema.nodes['bullet_list']
   );
 
@@ -96,7 +96,7 @@ function getOrderedListInputRules(schema) {
   // markdown (where a ordered list will always start on 1). This is a slightly modified
   // version of that input rule.
   const numberOneRule = createInputRule(
-    /^(1)[\.\)] $/,
+    /^(1)[.)] $/,
     schema.nodes['ordered_list']
   );
 

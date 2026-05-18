@@ -1,7 +1,6 @@
-import { inputRules, InputRule } from 'prosemirror-inputrules';
+import { inputRules } from 'prosemirror-inputrules';
 import { applyMarkOnRange } from '../commands';
 import { createInputRule } from '../utils';
-import { TextSelection } from 'prosemirror-state';
 
 const validCombos = {
   '**': ['_', '~~', '^'],
@@ -139,15 +138,15 @@ function addCodeMark(markType, specialChar) {
 }
 
 export const strongRegex1 =
-  /(\S*)(\_\_([^\_\s](\_(?!\_)|[^\_])*[^\_\s]|[^\_\s])\_\_)$/;
+  /(\S*)(__([^_\s](_(?!_)|[^_])*[^_\s]|[^_\s])__)$/;
 export const strongRegex2 =
-  /(\S*)(\*\*([^\*\s](\*(?!\*)|[^\*])*[^\*\s]|[^\*\s])\*\*)$/;
+  /(\S*)(\*\*([^*\s](\*(?!\*)|[^*])*[^*\s]|[^*\s])\*\*)$/;
 export const italicRegex1 =
-  /(\S*[^\s\_]*)(\_([^\s\_][^\_]*[^\s\_]|[^\s\_])\_)$/;
+  /(\S*[^\s_]*)(_([^\s_][^_]*[^\s_]|[^\s_])_)$/;
 export const italicRegex2 =
-  /(\S*[^\s\*]*)(\*([^\s\*][^\*]*[^\s\*]|[^\s\*])\*)$/;
+  /(\S*[^\s*]*)(\*([^\s*][^*]*[^\s*]|[^\s*])\*)$/;
 export const strikeRegex =
-  /(\S*)(\~\~([^\s\~](\~(?!\~)|[^\~])*[^\s\~]|[^\s\~])\~\~)$/;
+  /(\S*)(~~([^\s~](~(?!~)|[^~])*[^\s~]|[^\s~])~~)$/;
 export const codeRegex = /(\S*)(`[^\s][^`]*`)$/;
 export const supertextRegex = /(\S*[^\s^]*)(\^([^\s^][^^]*[^\s^]|[^\s^])\^)$/;
 

@@ -1,4 +1,3 @@
-/* eslint-disable no-plusplus */
 const prefix = 'ProseMirror-prompt';
 
 function reportInvalid(dom, message) {
@@ -38,7 +37,6 @@ export function openPrompt(options) {
   wrapper.className = prefix;
 
   const close = () => {
-    // eslint-disable-next-line no-use-before-define
     window.removeEventListener('mousedown', mouseOutside);
     if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
   };
@@ -56,11 +54,11 @@ export function openPrompt(options) {
   submitButton.type = 'submit';
   submitButton.className =
     'button tiny button--save-link ' + prefix + '-submit';
-  submitButton.textContent = 'Create Link';
+  submitButton.textContent = options.submitLabel || 'Create Link';
   let cancelButton = document.createElement('button');
   cancelButton.type = 'button';
   cancelButton.className = 'button tiny hollow secondary' + prefix + '-cancel';
-  cancelButton.textContent = 'Cancel';
+  cancelButton.textContent = options.cancelLabel || 'Cancel';
   cancelButton.addEventListener('click', close);
 
   let form = wrapper.appendChild(document.createElement('form'));

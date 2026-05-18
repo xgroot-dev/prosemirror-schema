@@ -16,6 +16,7 @@ import {
   superscript,
   strike,
   strong,
+  underline,
   link,
   code,
 } from './serializer';
@@ -39,6 +40,7 @@ export const ArticleMarkdownSerializer = new MarkdownSerializerBase(
     superscript,
     strike,
     strong,
+    underline,
     link,
     code,
   }

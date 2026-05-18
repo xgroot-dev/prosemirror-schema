@@ -1,4 +1,4 @@
-import Field from './Field';
+import { Field } from './Field';
 
 // ::- A field class for dropdown fields based on a plain `<select>`
 // tag. Expects an option `options`, which should be an array of

@@ -1,4 +1,3 @@
-/* eslint-disable class-methods-use-this */
 // ::- The type of field that `FieldPrompt` expects to be passed to it.
 export class Field {
   // :: (Object)

@@ -28,13 +28,11 @@ export const triggerCharacters = (char, minChars = 0) => $position => {
 
   let match;
 
-  // eslint-disable-next-line
-  while ((match = regexp.exec(text))) {
+  while ((match = regexp.exec(text)) !== null) {
     // Check if the character before the match is a space, start of string, or null character
     const prefix = match.input.slice(Math.max(0, match.index - 1), match.index);
     if (!/^[\s\0]?$/.test(prefix)) {
       // If the prefix is not empty, space, or null, skip this match
-      // eslint-disable-next-line
       continue;
     }
 

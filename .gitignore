@@ -5,3 +5,9 @@ node_modules
 
 # ignore dist
 dist
+/.claude/settings.local.json
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/.gitignore
+/.idea/modules.xml
+/.idea/prosemirror-schema.iml
+/.idea/vcs.xml

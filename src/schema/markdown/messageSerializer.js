@@ -4,6 +4,7 @@ import {
   mention,
   blockquote,
   code_block,
+  heading,
   bullet_list,
   ordered_list,
   list_item,
@@ -14,6 +15,7 @@ import {
   em,
   strike,
   strong,
+  underline,
   link,
   code,
 } from './serializer';
@@ -23,6 +25,7 @@ export const MessageMarkdownSerializer = new MarkdownSerializerBase(
     mention,
     blockquote,
     code_block,
+    heading,
     bullet_list,
     ordered_list,
     list_item,
@@ -35,6 +38,7 @@ export const MessageMarkdownSerializer = new MarkdownSerializerBase(
     em,
     strike,
     strong,
+    underline,
     link,
     code,
   }

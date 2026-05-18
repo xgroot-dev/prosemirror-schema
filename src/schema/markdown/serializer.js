@@ -97,6 +97,13 @@ export const strike = {
   mixable: true,
   expelEnclosingWhitespace: true,
 };
+export const underline = {
+  open: '<u>',
+  close: '</u>',
+  mixable: true,
+  expelEnclosingWhitespace: true,
+  escape: false,
+};
 export const strong = {
   open: '**',
   close: '**',

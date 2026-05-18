@@ -4,14 +4,17 @@ import {
   inputRules,
 } from 'prosemirror-inputrules';
 
-import { leafNodeReplacementCharacter } from '../utils';
+import { safeInsert } from 'prosemirror-utils';
+import {
+  leafNodeReplacementCharacter,
+  createInputRule,
+  defaultInputRuleHandler,
+} from '../utils';
 import {
   isConvertableToCodeBlock,
   transformToCodeBlockAction,
   insertBlock,
 } from '../commands';
-import { safeInsert } from 'prosemirror-utils';
-import { createInputRule, defaultInputRuleHandler } from '../utils';
 
 const MAX_HEADING_LEVEL = 6;
 

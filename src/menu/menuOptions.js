@@ -1,5 +1,5 @@
 import { wrapInList } from "prosemirror-schema-list";
-import { toggleMark } from "prosemirror-commands";
+import { toggleMark, setBlockType } from "prosemirror-commands";
 import { MenuItem } from "prosemirror-menu";
 import { undo, redo } from "prosemirror-history";
 import { openPrompt } from "../prompt";
@@ -13,12 +13,29 @@ import {
 import icons from "../icons";
 import { markActive } from "../utils";
 
+// Resolve a translation key with English fallback. `t` follows vue-i18n's
+// behaviour of returning the key when no translation is registered.
+const tr = (t, key, fallback) => {
+  if (!t) return fallback;
+  const result = t(key);
+  return result && result !== key ? result : fallback;
+};
+
+// Attach a richer tooltip via host app's helper (e.g. floating-vue), falling
+// back to the native `title` attribute when no helper is provided. Always
+// keep the title attribute too as accessibility fallback.
+const setTooltip = (el, text, attachTooltip) => {
+  if (!el || !text) return;
+  if (typeof attachTooltip === "function") attachTooltip(el, text);
+  else el.title = text;
+};
+
 const wrapListItem = (nodeType, options) =>
   cmdItem(wrapInList(nodeType, options.attrs), options);
 
-const imageUploadItem = (nodeType, onImageUpload) =>
+const imageUploadItem = (nodeType, onImageUpload, t) =>
   new MenuItem({
-    title: "Upload image",
+    title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.IMAGE_UPLOAD", "Upload image"),
     icon: icons.image,
     enable() {
       return true;
@@ -32,7 +49,7 @@ const imageUploadItem = (nodeType, onImageUpload) =>
 const headerItem = (nodeType, options) => {
   const { level = 1 } = options;
   return new MenuItem({
-    title: `Heading ${level}`,
+    title: options.title || `Heading ${level}`,
     icon: options.icon,
     active(state) {
       return blockTypeIsActive(state, nodeType, { level });
@@ -54,9 +71,9 @@ const headerItem = (nodeType, options) => {
   });
 };
 
-const linkItem = (markType) =>
+const linkItem = (markType, t) =>
   new MenuItem({
-    title: "Add or remove link",
+    title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.LINK", "Add or remove link"),
     icon: icons.link,
     active(state) {
       return markActive(state, markType);
@@ -70,10 +87,24 @@ const linkItem = (markType) =>
         return true;
       }
       openPrompt({
-        title: "Create a link",
+        title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.CREATE_LINK", "Create a link"),
+        submitLabel: tr(
+          t,
+          "CONVERSATION.REPLYBOX.EDITOR.SAVE_LINK",
+          "Create Link"
+        ),
+        cancelLabel: tr(
+          t,
+          "CONVERSATION.REPLYBOX.EDITOR.CANCEL",
+          "Cancel"
+        ),
         fields: {
           href: new TextField({
-            label: "https://example.com",
+            label: tr(
+              t,
+              "CONVERSATION.REPLYBOX.EDITOR.LINK_PLACEHOLDER",
+              "https://example.com"
+            ),
             class: "small",
             required: true,
           }),
@@ -84,6 +115,518 @@ const linkItem = (markType) =>
         },
       });
       return false;
+    },
+  });
+
+// Text color palette shared with dashboard's wootConstants.COLORS — kept in
+// sync manually so this patch stays self-contained (the package can't import
+// app constants). `key` doubles as the i18n suffix.
+const TEXT_COLOR_PALETTE = [
+  { key: "RED", name: "Red", value: "#FF0000" },
+  { key: "YELLOW", name: "Yellow", value: "#FFBF05" },
+  { key: "BLUE", name: "Blue", value: "#0000FF" },
+  { key: "ROSE_RED", name: "Rose Red", value: "#C12161" },
+  { key: "DEEP_CYAN", name: "Deep Cyan", value: "#007181" },
+  { key: "ORANGE", name: "Orange", value: "#FF6A00" },
+  { key: "PISTACHIO", name: "Pistachio", value: "#A9E694" },
+  { key: "PURPLE", name: "Purple", value: "#6638D9" },
+  { key: "FUCHSIA", name: "Fuchsia", value: "#FF00FF" },
+  { key: "SILVER", name: "Silver", value: "#999999" },
+  { key: "NAVY", name: "Navy", value: "#151882" },
+  { key: "OLD_PINK", name: "Old Pink", value: "#CF809E" },
+  { key: "AQUA", name: "Aqua", value: "#00D2D9" },
+  { key: "BROWN", name: "Brown", value: "#664933" },
+  { key: "OLIVE", name: "Olive", value: "#665E00" },
+  { key: "GOLD", name: "Gold", value: "#D9B100" },
+  { key: "BEIGE", name: "Beige", value: "#938576" },
+  { key: "WINE", name: "Wine", value: "#791A3E" },
+  { key: "FOREST", name: "Forest", value: "#004528" },
+  { key: "GREEN", name: "Green", value: "#3f784f" },
+  { key: "BLUE_GREY", name: "Blue Grey", value: "#8AA0E2" },
+  { key: "RUBY_RED", name: "Ruby Red", value: "#CF1840" },
+  { key: "CHESTNUT_BROWN", name: "Chestnut Brown", value: "#A44A2B" },
+  { key: "ASH_GREY", name: "Ash Grey", value: "#6e776e" },
+];
+
+const showTextColorPicker = (
+  view,
+  markType,
+  t,
+  attachTooltip,
+  detachTooltip,
+  anchorEl
+) => {
+  document
+    .querySelectorAll(".pm-color-picker-popup")
+    .forEach((el) => el.remove());
+
+  const popup = document.createElement("div");
+  popup.className = "pm-color-picker-popup";
+  const rect = anchorEl.getBoundingClientRect();
+  popup.style.cssText = [
+    "position: fixed",
+    `top: ${rect.bottom + 4}px`,
+    `left: ${rect.left}px`,
+    "z-index: 9999",
+    "background: rgb(var(--solid-1, 255 255 255))",
+    "border: 1px solid rgba(0,0,0,0.12)",
+    "border-radius: 12px",
+    "padding: 4px",
+    "box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.05)",
+  ].join(";");
+
+  const grid = document.createElement("div");
+  grid.style.cssText = [
+    "display: grid",
+    "grid-template-columns: repeat(10, 22px)",
+    "gap: 4px",
+  ].join(";");
+
+  // Tooltipped elements live in document.body via floating-vue's popper;
+  // they don't auto-cleanup when their anchor is removed from the DOM, so
+  // we track them and explicitly detach before popup.remove().
+  const tooltipAnchors = [];
+  const closePopup = () => {
+    if (typeof detachTooltip === "function") {
+      tooltipAnchors.forEach((el) => detachTooltip(el));
+    }
+    popup.remove();
+  };
+
+  const applyColor = (color) => {
+    const { from, to, empty } = view.state.selection;
+    let tr = view.state.tr;
+    if (color === null) {
+      tr = empty
+        ? tr.removeStoredMark(markType)
+        : tr.removeMark(from, to, markType);
+    } else if (empty) {
+      tr = tr.addStoredMark(markType.create({ color }));
+    } else {
+      tr = tr
+        .removeMark(from, to, markType)
+        .addMark(from, to, markType.create({ color }));
+    }
+    view.dispatch(tr);
+    view.focus();
+    closePopup();
+  };
+
+  TEXT_COLOR_PALETTE.forEach((color) => {
+    const swatch = document.createElement("div");
+    setTooltip(
+      swatch,
+      tr(t, `CONVERSATION.REPLYBOX.EDITOR.COLOR.${color.key}`, color.name),
+      attachTooltip
+    );
+    tooltipAnchors.push(swatch);
+    swatch.style.cssText = [
+      "width: 22px",
+      "height: 22px",
+      "border-radius: 4px",
+      "cursor: pointer",
+      "border: 1px solid rgba(0,0,0,0.1)",
+      `background: ${color.value}`,
+      "transition: transform 0.1s",
+    ].join(";");
+    swatch.addEventListener("mouseenter", () => {
+      swatch.style.transform = "scale(1.15)";
+    });
+    swatch.addEventListener("mouseleave", () => {
+      swatch.style.transform = "";
+    });
+    swatch.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      applyColor(color.value);
+    });
+    grid.appendChild(swatch);
+  });
+
+  popup.appendChild(grid);
+
+  const clear = document.createElement("div");
+  setTooltip(
+    clear,
+    tr(t, "CONVERSATION.REPLYBOX.EDITOR.CLEAR_FORMATTING", "Clear formatting"),
+    attachTooltip
+  );
+  tooltipAnchors.push(clear);
+  clear.style.cssText = [
+    "margin-top: 4px",
+    "padding: 8px 12px",
+    "border-radius: 8px",
+    "color: #666",
+    "cursor: pointer",
+    "display: flex",
+    "justify-content: center",
+    "align-items: center",
+  ].join(";");
+  clear.addEventListener("mouseenter", () => {
+    clear.style.backgroundColor = "rgba(0,0,0,0.04)";
+  });
+  clear.addEventListener("mouseleave", () => {
+    clear.style.backgroundColor = "";
+  });
+  clear.innerHTML =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+    '<path d="M3.27 5 2 6.27l6.97 6.97L6.5 19h3l1.57-3.66L16.73 21 18 19.73 3.55 5.27 3.27 5ZM6 5v.18L8.82 8h2.4l-.93 2.15 2.09 2.09L13.32 8H20V5H6Z"/>' +
+    "</svg>";
+  clear.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    applyColor(null);
+  });
+  popup.appendChild(clear);
+
+  document.body.appendChild(popup);
+
+  setTimeout(() => {
+    const handler = (e) => {
+      if (!popup.contains(e.target)) {
+        closePopup();
+        document.removeEventListener("mousedown", handler);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+  }, 0);
+};
+
+const textColorItem = (markType, t, attachTooltip, detachTooltip) =>
+  new MenuItem({
+    title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.TEXT_COLOR", "Text color"),
+    icon: icons.textColor,
+    enable() {
+      return true;
+    },
+    run(state, dispatch, view, event) {
+      showTextColorPicker(
+        view,
+        markType,
+        t,
+        attachTooltip,
+        detachTooltip,
+        event.currentTarget
+      );
+      return true;
+    },
+  });
+
+// Background color palette mirrors TEXT_COLOR_PALETTE; the schema mark name is
+// `backgroundColor` (see emailSchema.js) and stores the value under attr
+// `backgroundColor`. HTML mode only — no markdown round-trip.
+const BG_COLOR_PALETTE = [
+  { key: "RED", name: "Red", value: "#FF0000" },
+  { key: "YELLOW", name: "Yellow", value: "#FFBF05" },
+  { key: "BLUE", name: "Blue", value: "#0000FF" },
+  { key: "ROSE_RED", name: "Rose Red", value: "#C12161" },
+  { key: "DEEP_CYAN", name: "Deep Cyan", value: "#007181" },
+  { key: "ORANGE", name: "Orange", value: "#FF6A00" },
+  { key: "PISTACHIO", name: "Pistachio", value: "#A9E694" },
+  { key: "PURPLE", name: "Purple", value: "#6638D9" },
+  { key: "FUCHSIA", name: "Fuchsia", value: "#FF00FF" },
+  { key: "SILVER", name: "Silver", value: "#999999" },
+  { key: "NAVY", name: "Navy", value: "#151882" },
+  { key: "OLD_PINK", name: "Old Pink", value: "#CF809E" },
+  { key: "AQUA", name: "Aqua", value: "#00D2D9" },
+  { key: "BROWN", name: "Brown", value: "#664933" },
+  { key: "OLIVE", name: "Olive", value: "#665E00" },
+  { key: "GOLD", name: "Gold", value: "#D9B100" },
+  { key: "BEIGE", name: "Beige", value: "#938576" },
+  { key: "WINE", name: "Wine", value: "#791A3E" },
+  { key: "FOREST", name: "Forest", value: "#004528" },
+  { key: "GREEN", name: "Green", value: "#3f784f" },
+  { key: "BLUE_GREY", name: "Blue Grey", value: "#8AA0E2" },
+  { key: "RUBY_RED", name: "Ruby Red", value: "#CF1840" },
+  { key: "CHESTNUT_BROWN", name: "Chestnut Brown", value: "#A44A2B" },
+  { key: "ASH_GREY", name: "Ash Grey", value: "#6e776e" },
+];
+
+const showBgColorPicker = (
+  view,
+  markType,
+  t,
+  attachTooltip,
+  detachTooltip,
+  anchorEl
+) => {
+  document
+    .querySelectorAll(".pm-bg-color-picker-popup")
+    .forEach((el) => el.remove());
+
+  const popup = document.createElement("div");
+  popup.className = "pm-bg-color-picker-popup";
+  const rect = anchorEl.getBoundingClientRect();
+  popup.style.cssText = [
+    "position: fixed",
+    `top: ${rect.bottom + 4}px`,
+    `left: ${rect.left}px`,
+    "z-index: 9999",
+    "background: rgb(var(--solid-1, 255 255 255))",
+    "border: 1px solid rgba(0,0,0,0.12)",
+    "border-radius: 12px",
+    "padding: 4px",
+    "box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.05)",
+  ].join(";");
+
+  const grid = document.createElement("div");
+  grid.style.cssText = [
+    "display: grid",
+    "grid-template-columns: repeat(10, 22px)",
+    "gap: 4px",
+  ].join(";");
+
+  const tooltipAnchors = [];
+  const closePopup = () => {
+    if (typeof detachTooltip === "function") {
+      tooltipAnchors.forEach((el) => detachTooltip(el));
+    }
+    popup.remove();
+  };
+
+  const applyColor = (color) => {
+    const { from, to, empty } = view.state.selection;
+    let tr = view.state.tr;
+    if (color === null) {
+      tr = empty
+        ? tr.removeStoredMark(markType)
+        : tr.removeMark(from, to, markType);
+    } else if (empty) {
+      tr = tr.addStoredMark(markType.create({ backgroundColor: color }));
+    } else {
+      tr = tr
+        .removeMark(from, to, markType)
+        .addMark(from, to, markType.create({ backgroundColor: color }));
+    }
+    view.dispatch(tr);
+    view.focus();
+    closePopup();
+  };
+
+  BG_COLOR_PALETTE.forEach((color) => {
+    const swatch = document.createElement("div");
+    setTooltip(
+      swatch,
+      tr(t, `CONVERSATION.REPLYBOX.EDITOR.BG_COLOR.${color.key}`, color.name),
+      attachTooltip
+    );
+    tooltipAnchors.push(swatch);
+    swatch.style.cssText = [
+      "width: 22px",
+      "height: 22px",
+      "border-radius: 4px",
+      "cursor: pointer",
+      "border: 1px solid rgba(0,0,0,0.1)",
+      `background: ${color.value}`,
+      "transition: transform 0.1s",
+    ].join(";");
+    swatch.addEventListener("mouseenter", () => {
+      swatch.style.transform = "scale(1.15)";
+    });
+    swatch.addEventListener("mouseleave", () => {
+      swatch.style.transform = "";
+    });
+    swatch.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      applyColor(color.value);
+    });
+    grid.appendChild(swatch);
+  });
+
+  popup.appendChild(grid);
+
+  const clear = document.createElement("div");
+  setTooltip(
+    clear,
+    tr(t, "CONVERSATION.REPLYBOX.EDITOR.CLEAR_FORMATTING", "Clear formatting"),
+    attachTooltip
+  );
+  tooltipAnchors.push(clear);
+  clear.style.cssText = [
+    "margin-top: 4px",
+    "padding: 8px 12px",
+    "border-radius: 8px",
+    "color: #666",
+    "cursor: pointer",
+    "display: flex",
+    "justify-content: center",
+    "align-items: center",
+  ].join(";");
+  clear.addEventListener("mouseenter", () => {
+    clear.style.backgroundColor = "rgba(0,0,0,0.04)";
+  });
+  clear.addEventListener("mouseleave", () => {
+    clear.style.backgroundColor = "";
+  });
+  clear.innerHTML =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+    '<path d="M3.27 5 2 6.27l6.97 6.97L6.5 19h3l1.57-3.66L16.73 21 18 19.73 3.55 5.27 3.27 5ZM6 5v.18L8.82 8h2.4l-.93 2.15 2.09 2.09L13.32 8H20V5H6Z"/>' +
+    "</svg>";
+  clear.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    applyColor(null);
+  });
+  popup.appendChild(clear);
+
+  document.body.appendChild(popup);
+
+  setTimeout(() => {
+    const handler = (e) => {
+      if (!popup.contains(e.target)) {
+        closePopup();
+        document.removeEventListener("mousedown", handler);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+  }, 0);
+};
+
+const bgColorItem = (markType, t, attachTooltip, detachTooltip) =>
+  new MenuItem({
+    title: tr(
+      t,
+      "CONVERSATION.REPLYBOX.EDITOR.BG_COLOR_LABEL",
+      "Background color"
+    ),
+    icon: icons.bgColor,
+    enable() {
+      return true;
+    },
+    run(state, dispatch, view, event) {
+      showBgColorPicker(
+        view,
+        markType,
+        t,
+        attachTooltip,
+        detachTooltip,
+        event.currentTarget
+      );
+      return true;
+    },
+  });
+
+const HEADING_LEVELS = [
+  {
+    key: "NORMAL",
+    label: "Normal text",
+    fontSize: "14px",
+    fontWeight: 400,
+    level: 0,
+  },
+  {
+    key: "H1",
+    label: "Heading 1",
+    fontSize: "22px",
+    fontWeight: 700,
+    level: 1,
+  },
+  {
+    key: "H2",
+    label: "Heading 2",
+    fontSize: "18px",
+    fontWeight: 700,
+    level: 2,
+  },
+  {
+    key: "H3",
+    label: "Heading 3",
+    fontSize: "16px",
+    fontWeight: 600,
+    level: 3,
+  },
+];
+
+const showHeadingPicker = (view, schema, t, anchorEl) => {
+  document
+    .querySelectorAll(".pm-heading-popup")
+    .forEach((el) => el.remove());
+
+  const popup = document.createElement("div");
+  popup.className = "pm-heading-popup";
+  const rect = anchorEl.getBoundingClientRect();
+  popup.style.cssText = [
+    "position: fixed",
+    `top: ${rect.bottom + 4}px`,
+    `left: ${rect.left}px`,
+    "z-index: 9999",
+    "background: rgb(var(--solid-1, 255 255 255))",
+    "border: 1px solid rgba(0,0,0,0.12)",
+    "border-radius: 12px",
+    "padding: 4px",
+    "box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.05)",
+    "min-width: 180px",
+  ].join(";");
+
+  const apply = (level) => {
+    const command =
+      level === 0
+        ? setBlockType(schema.nodes.paragraph)
+        : setBlockType(schema.nodes.heading, { level });
+    if (command(view.state, view.dispatch)) view.focus();
+    popup.remove();
+  };
+
+  HEADING_LEVELS.forEach((item) => {
+    const row = document.createElement("div");
+    // Label is visible inline, no tooltip needed.
+    row.style.cssText = [
+      "padding: 8px 12px",
+      "cursor: pointer",
+      "border-radius: 8px",
+      `font-size: ${item.fontSize}`,
+      `font-weight: ${item.fontWeight}`,
+      "line-height: 1.2",
+      "color: inherit",
+      "transition: background-color 0.1s",
+    ].join(";");
+    row.textContent = tr(
+      t,
+      `CONVERSATION.REPLYBOX.HEADING_LEVEL.${item.key}`,
+      item.label
+    );
+    row.addEventListener("mouseenter", () => {
+      row.style.backgroundColor = "rgba(0,0,0,0.04)";
+    });
+    row.addEventListener("mouseleave", () => {
+      row.style.backgroundColor = "";
+    });
+    row.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      apply(item.level);
+    });
+    popup.appendChild(row);
+  });
+
+  document.body.appendChild(popup);
+
+  setTimeout(() => {
+    const handler = (e) => {
+      if (!popup.contains(e.target)) {
+        popup.remove();
+        document.removeEventListener("mousedown", handler);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+  }, 0);
+};
+
+const headingLevelItem = (schema, t) =>
+  new MenuItem({
+    title: tr(
+      t,
+      "CONVERSATION.REPLYBOX.HEADING_LEVEL.LABEL",
+      "Heading level"
+    ),
+    icon: icons.headingLevel,
+    enable() {
+      return true;
+    },
+    run(state, dispatch, view, event) {
+      showHeadingPicker(view, schema, t, event.currentTarget);
+      return true;
     },
   });
 
@@ -101,58 +644,97 @@ const buildMenuOptions = (
       "orderedList",
     ],
     onImageUpload = () => {},
+    t,
+    attachTooltip,
+    detachTooltip,
   }
 ) => {
   const availableMenuOptions = {
     strong: markItem(schema.marks.strong, {
-      title: "Toggle strong style",
+      title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.BOLD", "Toggle strong style"),
       icon: icons.strong,
     }),
     em: markItem(schema.marks.em, {
-      title: "Toggle emphasis",
+      title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.ITALIC", "Toggle emphasis"),
       icon: icons.em,
     }),
+    underline: schema.marks.underline
+      ? markItem(schema.marks.underline, {
+          title: tr(
+            t,
+            "CONVERSATION.REPLYBOX.EDITOR.UNDERLINE",
+            "Toggle underline"
+          ),
+          icon: icons.underline,
+        })
+      : null,
+    textColor: schema.marks.textColor
+      ? textColorItem(schema.marks.textColor, t, attachTooltip, detachTooltip)
+      : null,
+    backgroundColor: schema.marks.backgroundColor
+      ? bgColorItem(
+          schema.marks.backgroundColor,
+          t,
+          attachTooltip,
+          detachTooltip
+        )
+      : null,
+    headingLevel: schema.nodes.heading
+      ? headingLevelItem(schema, t)
+      : null,
     code: markItem(schema.marks.code, {
-      title: "Toggle code font",
+      title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.CODE", "Toggle code font"),
       icon: icons.code,
     }),
-    link: linkItem(schema.marks.link),
+    link: linkItem(schema.marks.link, t),
     bulletList: wrapListItem(schema.nodes.bullet_list, {
-      title: "Wrap in bullet list",
+      title: tr(
+        t,
+        "CONVERSATION.REPLYBOX.EDITOR.BULLET_LIST",
+        "Wrap in bullet list"
+      ),
       icon: icons.bulletList,
     }),
     orderedList: wrapListItem(schema.nodes.ordered_list, {
-      title: "Wrap in ordered list",
+      title: tr(
+        t,
+        "CONVERSATION.REPLYBOX.EDITOR.ORDERED_LIST",
+        "Wrap in ordered list"
+      ),
       icon: icons.orderedList,
     }),
     undo: new MenuItem({
-      title: "Undo last change",
+      title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.UNDO", "Undo last change"),
       run: undo,
       enable: (state) => undo(state),
       icon: icons.undo,
     }),
     redo: new MenuItem({
-      title: "Redo last undone change",
+      title: tr(
+        t,
+        "CONVERSATION.REPLYBOX.EDITOR.REDO",
+        "Redo last undone change"
+      ),
       run: redo,
       enable: (state) => redo(state),
       icon: icons.redo,
     }),
     h1: headerItem(schema.nodes.heading, {
       level: 1,
-      title: "Toggle code font",
+      title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.H1", "Heading 1"),
       icon: icons.h1,
     }),
     h2: headerItem(schema.nodes.heading, {
       level: 2,
-      title: "Toggle code font",
+      title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.H2", "Heading 2"),
       icon: icons.h2,
     }),
     h3: headerItem(schema.nodes.heading, {
       level: 3,
-      title: "Toggle code font",
+      title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.H3", "Heading 3"),
       icon: icons.h3,
     }),
-    imageUpload: imageUploadItem(schema.nodes.image, onImageUpload),
+    imageUpload: imageUploadItem(schema.nodes.image, onImageUpload, t),
   };
 
   return [
