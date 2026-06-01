@@ -12,6 +12,7 @@ import {
   image,
   hard_break,
   text,
+  internal_note,
   em,
   superscript,
   strike,
@@ -34,6 +35,7 @@ export const ArticleMarkdownSerializer = new MarkdownSerializerBase(
     image,
     hard_break,
     text,
+    internal_note,
   },
   {
     em,

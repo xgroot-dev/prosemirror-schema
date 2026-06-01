@@ -22,6 +22,19 @@ export const fullSchema = new Schema({
       group: 'block',
     }),
     list_item: Object.assign(listItem, { content: 'paragraph block*' }),
+    internal_note: {
+      group: 'block',
+      atom: true,
+      selectable: true,
+      attrs: { text: { default: '' } },
+      parseDOM: [
+        {
+          tag: 'div.internal_note',
+          getAttrs: dom => ({ text: dom.textContent || '' }),
+        },
+      ],
+      toDOM: node => ['div', { class: 'internal_note' }, node.attrs.text],
+    },
   },
   marks: {
     link: schema.spec.marks.get('link'),

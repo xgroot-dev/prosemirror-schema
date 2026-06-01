@@ -77,6 +77,10 @@ export const hard_break = (state, node, parent, index) => {
 export const text = (state, node) => {
   state.text(node.text, false);
 };
+export const internal_note = (state, node) => {
+  state.write(`<div class="internal_note">${node.attrs.text}</div>`);
+  state.closeBlock(node);
+};
 
 export const em = {
   open: '*',

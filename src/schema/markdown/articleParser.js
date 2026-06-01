@@ -33,6 +33,10 @@ export const articleMdToPmMapping = {
       return { userId, userFullName };
     },
   },
+  internal_note: {
+    node: 'internal_note',
+    getAttrs: tok => ({ text: tok.content }),
+  },
 };
 
 const md = MarkdownIt('commonmark', {
@@ -48,6 +52,26 @@ md.enable([
   'escape',
   'hr',
 ]);
+
+// Custom block rule: round-trip a single-line <div class="internal_note">…</div>
+// into one internal_note token without enabling the global html flag.
+md.block.ruler.before(
+  'paragraph',
+  'internal_note',
+  (state, startLine, endLine, silent) => {
+    const start = state.bMarks[startLine] + state.tShift[startLine];
+    const line = state.src.slice(start, state.eMarks[startLine]);
+    const m = line.match(/^<div class="internal_note">([\s\S]*?)<\/div>\s*$/);
+    if (!m) return false;
+    if (silent) return true;
+    const token = state.push('internal_note', 'div', 0);
+    token.block = true;
+    token.content = m[1];
+    token.map = [startLine, startLine + 1];
+    state.line = startLine + 1;
+    return true;
+  }
+);
 
 export class ArticleMarkdownTransformer {
   constructor(schema, tokenizer = md) {
