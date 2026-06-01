@@ -70,7 +70,10 @@ md.block.ruler.before(
     token.map = [startLine, startLine + 1];
     state.line = startLine + 1;
     return true;
-  }
+  },
+  // Act as a paragraph/blockquote/list terminator so the rule also fires when
+  // the div immediately follows a line of text (no blank line in between).
+  { alt: ['paragraph', 'blockquote', 'list'] }
 );
 
 export class ArticleMarkdownTransformer {
