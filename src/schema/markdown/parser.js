@@ -52,13 +52,13 @@ export const baseNodesMdToPmMapping = {
       const heightMatch = src.match(/cw_image_height=(\d+)px/);
       // Article images encode a size preset as `cw_image_width=<N>px|pct`;
       // surface it as a `style` attr (the article image node declares it):
-      // px -> max-width, pct -> width (%). Schemas without a `style` attr
-      // (message) simply ignore the extra key.
+      // px -> responsive width:100% capped at max-width, pct -> width (%).
+      // Schemas without a `style` attr (message) simply ignore the extra key.
       const widthMatch = src.match(/cw_image_width=(\d+)(px|pct)/);
       const widthStyle = widthMatch
         ? (widthMatch[2] === 'pct'
             ? `width: ${widthMatch[1]}%`
-            : `max-width: ${widthMatch[1]}px`)
+            : `width: 100%; max-width: ${widthMatch[1]}px`)
         : null;
       return {
         src,
