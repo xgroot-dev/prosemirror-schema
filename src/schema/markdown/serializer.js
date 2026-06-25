@@ -52,11 +52,30 @@ export const image = (state, node) => {
   if (node.attrs.height) {
     const param = `cw_image_height=${node.attrs.height}`;
     if (src.includes('?')) {
-      src = src.includes('cw_image_height=') ? 
+      src = src.includes('cw_image_height=') ?
         src.replace(/cw_image_height=[^&]+/, param) : `${src}&${param}`;
     } else {
       src += `?${param}`;
     }
+  }
+  // Article images carry their preset size in `style`: a fixed px size as
+  // `max-width: <N>px`, or a full-column size as `width: <N>%`. Encode it on the
+  // src as cw_image_width=<N>px | <N>pct (pct avoids a literal % in the URL).
+  // Normalise (strip any existing param) then re-apply, so clearing the size
+  // (style null on "Original") also drops the query param.
+  src = src.replace(/[?&]cw_image_width=[^&]*/g, '');
+  if (!src.includes('?') && src.includes('&')) src = src.replace('&', '?');
+  const style = node.attrs.style || '';
+  const pxMatch = style.match(/max-width:\s*(\d+)px/);
+  const pctMatch = style.match(/width:\s*(\d+)%/);
+  const sizeParam = pxMatch
+    ? `${pxMatch[1]}px`
+    : pctMatch
+      ? `${pctMatch[1]}pct`
+      : null;
+  if (sizeParam) {
+    const param = `cw_image_width=${sizeParam}`;
+    src += src.includes('?') ? `&${param}` : `?${param}`;
   }
   state.write(
     '![' +

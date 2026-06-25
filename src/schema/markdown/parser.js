@@ -50,11 +50,22 @@ export const baseNodesMdToPmMapping = {
     getAttrs: (tok) => {
       const src = tok.attrGet('src');
       const heightMatch = src.match(/cw_image_height=(\d+)px/);
+      // Article images encode a size preset as `cw_image_width=<N>px|pct`;
+      // surface it as a `style` attr (the article image node declares it):
+      // px -> max-width, pct -> width (%). Schemas without a `style` attr
+      // (message) simply ignore the extra key.
+      const widthMatch = src.match(/cw_image_width=(\d+)(px|pct)/);
+      const widthStyle = widthMatch
+        ? (widthMatch[2] === 'pct'
+            ? `width: ${widthMatch[1]}%`
+            : `max-width: ${widthMatch[1]}px`)
+        : null;
       return {
         src,
         title: tok.attrGet('title') || null,
         alt: (tok.children[0] && tok.children[0].content) || null,
-        height: heightMatch ? `${heightMatch[1]}px` : null
+        height: heightMatch ? `${heightMatch[1]}px` : null,
+        style: widthStyle
       };
     },
   },
