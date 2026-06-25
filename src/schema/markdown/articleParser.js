@@ -92,14 +92,18 @@ md.block.ruler.before(
     const firstLine = state.src.slice(start, state.eMarks[startLine]);
     if (!/^<div class="html-embed">/.test(firstLine)) return false;
 
-    // Find the line whose end closes the wrapper (handles single- and
-    // multi-line embeds; closing </div> must be the last thing on its line).
+    // Find the line that closes the wrapper by tracking <div>/</div> nesting
+    // depth, so embeds containing nested <div>s (e.g. a video wrapper around an
+    // iframe) don't terminate early on the first inner </div>. The wrapper is
+    // closed on the line where depth returns to 0.
+    let depth = 0;
     let nextLine = startLine;
-    while (nextLine < endLine) {
+    for (; nextLine < endLine; nextLine++) {
       const lineStart = state.bMarks[nextLine] + state.tShift[nextLine];
       const lineText = state.src.slice(lineStart, state.eMarks[nextLine]);
-      if (/<\/div>\s*$/.test(lineText)) break;
-      nextLine++;
+      depth += (lineText.match(/<div\b/g) || []).length;
+      depth -= (lineText.match(/<\/div\b/g) || []).length;
+      if (depth <= 0) break;
     }
     if (nextLine >= endLine) return false;
 
