@@ -13,6 +13,7 @@ import {
   hard_break,
   text,
   internal_note,
+  html_embed,
   em,
   superscript,
   strike,
@@ -36,6 +37,7 @@ export const ArticleMarkdownSerializer = new MarkdownSerializerBase(
     hard_break,
     text,
     internal_note,
+    html_embed,
   },
   {
     em,

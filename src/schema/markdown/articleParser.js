@@ -37,6 +37,10 @@ export const articleMdToPmMapping = {
     node: 'internal_note',
     getAttrs: tok => ({ text: tok.content }),
   },
+  html_embed: {
+    node: 'html_embed',
+    getAttrs: tok => ({ html: tok.content }),
+  },
 };
 
 const md = MarkdownIt('commonmark', {
@@ -73,6 +77,44 @@ md.block.ruler.before(
   },
   // Act as a paragraph/blockquote/list terminator so the rule also fires when
   // the div immediately follows a line of text (no blank line in between).
+  { alt: ['paragraph', 'blockquote', 'list'] }
+);
+
+// Custom block rule: round-trip a (possibly multi-line) raw HTML embed wrapped
+// in <div class="html-embed">…</div> into one html_embed token, without
+// enabling the global html flag. Raw embeds (iframes, scripts, widgets) often
+// span several lines, so scan until the line that closes the wrapper.
+md.block.ruler.before(
+  'paragraph',
+  'html_embed',
+  (state, startLine, endLine, silent) => {
+    const start = state.bMarks[startLine] + state.tShift[startLine];
+    const firstLine = state.src.slice(start, state.eMarks[startLine]);
+    if (!/^<div class="html-embed">/.test(firstLine)) return false;
+
+    // Find the line whose end closes the wrapper (handles single- and
+    // multi-line embeds; closing </div> must be the last thing on its line).
+    let nextLine = startLine;
+    while (nextLine < endLine) {
+      const lineStart = state.bMarks[nextLine] + state.tShift[nextLine];
+      const lineText = state.src.slice(lineStart, state.eMarks[nextLine]);
+      if (/<\/div>\s*$/.test(lineText)) break;
+      nextLine++;
+    }
+    if (nextLine >= endLine) return false;
+
+    const block = state.src.slice(start, state.eMarks[nextLine]);
+    const m = block.match(/^<div class="html-embed">([\s\S]*?)<\/div>\s*$/);
+    if (!m) return false;
+    if (silent) return true;
+
+    const token = state.push('html_embed', 'div', 0);
+    token.block = true;
+    token.content = m[1];
+    token.map = [startLine, nextLine + 1];
+    state.line = nextLine + 1;
+    return true;
+  },
   { alt: ['paragraph', 'blockquote', 'list'] }
 );
 

@@ -47,6 +47,19 @@
       font-size: var(--font-size-small);
     }
 
+    .html-embed {
+      border: 1px dashed var(--s-300);
+      border-radius: 4px;
+      padding: var(--space-small) var(--space-normal);
+      margin: var(--space-normal) 0;
+      background: var(--s-25);
+      color: var(--s-700);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: var(--font-size-small);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     a {
       font-weight: var(--font-weight-medium);
       font-size: var(--font-size-medium);
