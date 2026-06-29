@@ -81,6 +81,12 @@ export const internal_note = (state, node) => {
   state.write(`<div class="internal_note">${node.attrs.text}</div>`);
   state.closeBlock(node);
 };
+export const html_embed = (state, node) => {
+  // Emit the raw markup verbatim (newlines preserved) inside a recognizable
+  // wrapper so it round-trips back into an html_embed node on re-parse.
+  state.write(`<div class="html-embed">${node.attrs.html}</div>`);
+  state.closeBlock(node);
+};
 
 export const em = {
   open: '*',

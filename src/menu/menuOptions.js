@@ -46,6 +46,33 @@ const imageUploadItem = (nodeType, onImageUpload, t) =>
     },
   });
 
+// In-toolbar button for inserting an html_embed block. Mirrors imageUploadItem:
+// the host wires up `onHtmlEmbed` (move whatever the old above-editor button did
+// here). The current EditorView is passed so the host can insert the node, e.g.
+//   view.dispatch(view.state.tr.replaceSelectionWith(
+//     schema.nodes.html_embed.create({ html })));
+const htmlEmbedItem = (onHtmlEmbed, t) =>
+  new MenuItem({
+    title: tr(
+      t,
+      "CONVERSATION.REPLYBOX.EDITOR.HTML_EMBED",
+      "Insert HTML embed"
+    ),
+    // Text icon: render the literal label "HTML" instead of a glyph, so it reads
+    // unambiguously and doesn't collide with the </> inline-code button.
+    icon: {
+      text: "HTML",
+      css: "font-weight: 700; font-size: 9px; letter-spacing: -0.3px;",
+    },
+    enable() {
+      return true;
+    },
+    run(state, dispatch, view) {
+      onHtmlEmbed(view);
+      return true;
+    },
+  });
+
 const headerItem = (nodeType, options) => {
   const { level = 1 } = options;
   return new MenuItem({
@@ -807,6 +834,7 @@ const buildMenuOptions = (
       "orderedList",
     ],
     onImageUpload = () => {},
+    onHtmlEmbed = () => {},
     t,
     attachTooltip,
     detachTooltip,
@@ -901,6 +929,10 @@ const buildMenuOptions = (
       icon: icons.h3,
     }),
     imageUpload: imageUploadItem(schema.nodes.image, onImageUpload, t),
+    // Only available on schemas that define the html_embed node (article schema).
+    htmlEmbed: schema.nodes.html_embed
+      ? htmlEmbedItem(onHtmlEmbed, t)
+      : null,
   };
 
   return [

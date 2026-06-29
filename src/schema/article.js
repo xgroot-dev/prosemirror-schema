@@ -35,6 +35,21 @@ export const fullSchema = new Schema({
       ],
       toDOM: node => ['div', { class: 'internal_note' }, node.attrs.text],
     },
+    html_embed: {
+      group: 'block',
+      atom: true,
+      selectable: true,
+      attrs: { html: { default: '' } },
+      parseDOM: [
+        {
+          tag: 'div.html-embed',
+          getAttrs: dom => ({ html: dom.textContent || '' }),
+        },
+      ],
+      // Render the raw markup as text so authors see (and edit) the source
+      // instead of a live, rendered embed inside the editor.
+      toDOM: node => ['div', { class: 'html-embed' }, node.attrs.html],
+    },
   },
   marks: {
     link: schema.spec.marks.get('link'),

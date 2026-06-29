@@ -30,7 +30,13 @@ export { messageSchema } from "./schema/message";
 export const buildEditor = ({
   schema,
   placeholder,
-  methods: { onImageUpload, t, attachTooltip, detachTooltip } = {},
+  methods: {
+    onImageUpload,
+    onHtmlEmbed,
+    t,
+    attachTooltip,
+    detachTooltip,
+  } = {},
   plugins = [],
   enabledMenuOptions,
 }) => [
@@ -50,6 +56,7 @@ export const buildEditor = ({
     content: buildMenuOptions(schema, {
       enabledMenuOptions,
       onImageUpload,
+      onHtmlEmbed,
       t,
       attachTooltip,
       detachTooltip,
