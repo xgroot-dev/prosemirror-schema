@@ -11,7 +11,36 @@ export const fullSchema = new Schema({
     heading: schema.spec.nodes.get('heading'),
     code_block: schema.spec.nodes.get('code_block'),
     text: schema.spec.nodes.get('text'),
-    image: schema.spec.nodes.get('image'),
+    // Image node extended with a `style` attribute so a predefined size
+    // (max-width in px) can be applied in the article editor. The size is
+    // persisted to markdown as a `cw_image_width=<N>px` query param on the
+    // src (see markdown/serializer.js + markdown/parser.js) because markdown
+    // can't hold inline styles.
+    image: {
+      ...schema.spec.nodes.get('image'),
+      attrs: {
+        ...schema.spec.nodes.get('image').attrs,
+        style: { default: null },
+      },
+      parseDOM: [
+        {
+          tag: 'img[src]',
+          getAttrs: dom => ({
+            src: dom.getAttribute('src'),
+            title: dom.getAttribute('title'),
+            alt: dom.getAttribute('alt'),
+            style: dom.getAttribute('style'),
+          }),
+        },
+      ],
+      toDOM: node => {
+        const attrs = { src: node.attrs.src };
+        if (node.attrs.alt) attrs.alt = node.attrs.alt;
+        if (node.attrs.title) attrs.title = node.attrs.title;
+        if (node.attrs.style) attrs.style = node.attrs.style;
+        return ['img', attrs];
+      },
+    },
     hard_break: schema.spec.nodes.get('hard_break'),
     ordered_list: Object.assign(orderedList, {
       content: 'list_item+',
