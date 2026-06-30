@@ -21,7 +21,6 @@ import {
   underline,
   textColor,
   backgroundColor,
-  fontSize,
   link,
   code,
 } from './serializer';
@@ -50,7 +49,6 @@ export const ArticleMarkdownSerializer = new MarkdownSerializerBase(
     underline,
     textColor,
     backgroundColor,
-    fontSize,
     link,
     code,
   }

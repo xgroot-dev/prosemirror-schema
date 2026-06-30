@@ -1,7 +1,6 @@
 import { orderedList, bulletList, listItem } from 'prosemirror-schema-list';
 import { Schema } from 'prosemirror-model';
 import { schema } from 'prosemirror-markdown';
-import { messageSchema } from './message';
 
 export const fullSchema = new Schema({
   nodes: {
@@ -104,14 +103,53 @@ export const fullSchema = new Schema({
       ],
       toDOM: () => ['s', 0],
     },
-    // Inline styling marks reused verbatim from messageSchema so the article
-    // editor offers the same colour/size/underline formatting as the reply box.
-    // These persist to markdown as inline <span style="…"> / <u> (see
+    // Inline styling marks matching messageSchema so the article editor offers
+    // the same colour/underline formatting as the reply box. Defined inline
+    // (rather than reused via messageSchema.spec.marks.get) because the marks must
+    // exist the moment this Schema is constructed — pulling them from another
+    // schema module is fragile under ESM bundling (init order can leave them
+    // undefined). These persist to markdown as inline <span style="…"> / <u> (see
     // markdown/articleSerializer.js) and round-trip back via markdown/articleParser.js.
-    underline: messageSchema.spec.marks.get('underline'),
-    textColor: messageSchema.spec.marks.get('textColor'),
-    backgroundColor: messageSchema.spec.marks.get('backgroundColor'),
-    fontSize: messageSchema.spec.marks.get('fontSize'),
+    underline: {
+      parseDOM: [
+        { tag: 'u' },
+        {
+          style: 'text-decoration',
+          getAttrs: value => value === 'underline' && null,
+        },
+      ],
+      toDOM: () => ['u', 0],
+    },
+    textColor: {
+      attrs: { color: {} },
+      parseDOM: [
+        {
+          tag: 'span[style*="color"]',
+          getAttrs: dom => {
+            const color = dom.style.color;
+            return color ? { color } : false;
+          },
+        },
+      ],
+      toDOM: mark => ['span', { style: `color: ${mark.attrs.color}` }, 0],
+    },
+    backgroundColor: {
+      attrs: { backgroundColor: {} },
+      parseDOM: [
+        {
+          tag: 'span[style*="background-color"]',
+          getAttrs: dom => {
+            const backgroundColor = dom.style.backgroundColor;
+            return backgroundColor ? { backgroundColor } : false;
+          },
+        },
+      ],
+      toDOM: mark => [
+        'span',
+        { style: `background-color: ${mark.attrs.backgroundColor}` },
+        0,
+      ],
+    },
   },
 });
 

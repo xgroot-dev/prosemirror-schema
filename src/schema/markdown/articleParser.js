@@ -31,10 +31,6 @@ export const articleMdToPmMapping = {
     mark: 'backgroundColor',
     getAttrs: tok => Object.fromEntries(tok.attrs || []),
   },
-  fontSize: {
-    mark: 'fontSize',
-    getAttrs: tok => Object.fromEntries(tok.attrs || []),
-  },
   hr: { node: 'horizontal_rule' },
   heading: {
     block: 'heading',
@@ -99,11 +95,6 @@ const STYLE_PATTERNS = [
     re: /^color\s*:\s*(.+)$/i,
     mark: 'textColor',
     attr: m => ({ color: m[1].trim() }),
-  },
-  {
-    re: /^font-size\s*:\s*(.+)$/i,
-    mark: 'fontSize',
-    attr: m => ({ size: m[1].trim() }),
   },
 ];
 
