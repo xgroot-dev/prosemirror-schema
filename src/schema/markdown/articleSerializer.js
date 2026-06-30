@@ -19,6 +19,8 @@ import {
   strike,
   strong,
   underline,
+  textColor,
+  backgroundColor,
   link,
   code,
 } from './serializer';
@@ -45,6 +47,8 @@ export const ArticleMarkdownSerializer = new MarkdownSerializerBase(
     strike,
     strong,
     underline,
+    textColor,
+    backgroundColor,
     link,
     code,
   }
