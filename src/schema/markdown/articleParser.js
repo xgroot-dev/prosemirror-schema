@@ -21,6 +21,20 @@ export const articleSchemaToMdMapping = {
 export const articleMdToPmMapping = {
   ...baseNodesMdToPmMapping,
   ...baseMarksMdToPmMapping,
+  // Inline styling marks produced by the styled_html_inline core rule below.
+  underline: { mark: 'underline' },
+  textColor: {
+    mark: 'textColor',
+    getAttrs: tok => Object.fromEntries(tok.attrs || []),
+  },
+  backgroundColor: {
+    mark: 'backgroundColor',
+    getAttrs: tok => Object.fromEntries(tok.attrs || []),
+  },
+  fontSize: {
+    mark: 'fontSize',
+    getAttrs: tok => Object.fromEntries(tok.attrs || []),
+  },
   hr: { node: 'horizontal_rule' },
   heading: {
     block: 'heading',
@@ -43,8 +57,15 @@ export const articleMdToPmMapping = {
   },
 };
 
+// `html: true` so inline `<u>` / `<span style="…">` survive tokenisation as
+// html_inline tokens; the styled_html_inline core rule below converts only those
+// into mark open/close tokens, every other html_inline is downgraded to literal
+// text so we don't accept arbitrary inline HTML. `html_block` is disabled so the
+// custom <div class="internal_note"> / <div class="html-embed"> block rules below
+// keep handling those wrappers (markdown-it's html_block would otherwise swallow
+// them and emit tokens the parser can't map).
 const md = MarkdownIt('commonmark', {
-  html: false,
+  html: true,
   linkify: true,
   breaks: true,
 }).use(MarkdownItSup);
@@ -56,6 +77,90 @@ md.enable([
   'escape',
   'hr',
 ]);
+
+md.disable(['html_block']);
+
+const OPEN_U_RE = /^<u(\s[^>]*)?>$/i;
+const CLOSE_U_RE = /^<\/u\s*>$/i;
+const OPEN_SPAN_RE = /^<span\s+style\s*=\s*"([^"]*)"\s*>$/i;
+const CLOSE_SPAN_RE = /^<\/span\s*>$/i;
+
+// Single style on the opening span -> single mark. The serializer nests a
+// separate span per mark, so each opening tag carries exactly one declaration.
+// Patterns are anchored (^…$) so `color` doesn't match inside `background-color`
+// (and background-color is listed first as an extra guard).
+const STYLE_PATTERNS = [
+  {
+    re: /^background-color\s*:\s*(.+)$/i,
+    mark: 'backgroundColor',
+    attr: m => ({ backgroundColor: m[1].trim() }),
+  },
+  {
+    re: /^color\s*:\s*(.+)$/i,
+    mark: 'textColor',
+    attr: m => ({ color: m[1].trim() }),
+  },
+  {
+    re: /^font-size\s*:\s*(.+)$/i,
+    mark: 'fontSize',
+    attr: m => ({ size: m[1].trim() }),
+  },
+];
+
+const styledSpanMark = styleAttr => {
+  for (const { re, mark, attr } of STYLE_PATTERNS) {
+    const match = re.exec(styleAttr);
+    if (match) return { mark, attrs: attr(match) };
+  }
+  return null;
+};
+
+md.core.ruler.after('inline', 'styled_html_inline', state => {
+  state.tokens.forEach(blockToken => {
+    if (blockToken.type !== 'inline' || !blockToken.children) return;
+    const next = [];
+    const openStack = []; // pushed when we open a styled span; popped on close
+    blockToken.children.forEach(token => {
+      if (token.type !== 'html_inline') {
+        next.push(token);
+        return;
+      }
+      if (OPEN_U_RE.test(token.content)) {
+        const open = new state.Token('underline_open', 'u', 1);
+        open.markup = '<u>';
+        next.push(open);
+        return;
+      }
+      if (CLOSE_U_RE.test(token.content)) {
+        const close = new state.Token('underline_close', 'u', -1);
+        close.markup = '</u>';
+        next.push(close);
+        return;
+      }
+      const openSpan = OPEN_SPAN_RE.exec(token.content);
+      if (openSpan) {
+        const styled = styledSpanMark(openSpan[1]);
+        if (styled) {
+          const open = new state.Token(`${styled.mark}_open`, 'span', 1);
+          open.attrs = Object.entries(styled.attrs);
+          openStack.push(styled.mark);
+          next.push(open);
+          return;
+        }
+      }
+      if (CLOSE_SPAN_RE.test(token.content) && openStack.length) {
+        const markName = openStack.pop();
+        const close = new state.Token(`${markName}_close`, 'span', -1);
+        next.push(close);
+        return;
+      }
+      const textToken = new state.Token('text', '', 0);
+      textToken.content = token.content;
+      next.push(textToken);
+    });
+    blockToken.children = next;
+  });
+});
 
 // Custom block rule: round-trip a single-line <div class="internal_note">…</div>
 // into one internal_note token without enabling the global html flag.

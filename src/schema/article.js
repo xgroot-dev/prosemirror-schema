@@ -1,6 +1,7 @@
 import { orderedList, bulletList, listItem } from 'prosemirror-schema-list';
 import { Schema } from 'prosemirror-model';
 import { schema } from 'prosemirror-markdown';
+import { messageSchema } from './message';
 
 export const fullSchema = new Schema({
   nodes: {
@@ -103,6 +104,14 @@ export const fullSchema = new Schema({
       ],
       toDOM: () => ['s', 0],
     },
+    // Inline styling marks reused verbatim from messageSchema so the article
+    // editor offers the same colour/size/underline formatting as the reply box.
+    // These persist to markdown as inline <span style="…"> / <u> (see
+    // markdown/articleSerializer.js) and round-trip back via markdown/articleParser.js.
+    underline: messageSchema.spec.marks.get('underline'),
+    textColor: messageSchema.spec.marks.get('textColor'),
+    backgroundColor: messageSchema.spec.marks.get('backgroundColor'),
+    fontSize: messageSchema.spec.marks.get('fontSize'),
   },
 });
 
