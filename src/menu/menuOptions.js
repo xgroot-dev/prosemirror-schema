@@ -1,4 +1,4 @@
-import { wrapInList } from "prosemirror-schema-list";
+import { wrapInList, liftListItem } from "prosemirror-schema-list";
 import { toggleMark, setBlockType } from "prosemirror-commands";
 import { MenuItem } from "prosemirror-menu";
 import { undo, redo } from "prosemirror-history";
@@ -6,7 +6,6 @@ import { openPrompt } from "../prompt";
 import { TextField } from "../TextField";
 import {
   blockTypeIsActive,
-  cmdItem,
   markItem,
   toggleBlockType,
 } from "./common";
@@ -30,8 +29,62 @@ const setTooltip = (el, text, attachTooltip) => {
   else el.title = text;
 };
 
-const wrapListItem = (nodeType, options) =>
-  cmdItem(wrapInList(nodeType, options.attrs), options);
+// Returns info about the innermost list (bullet/ordered) that contains the
+// selection, or null when the selection is not inside any list.
+const parentListInfo = (state) => {
+  const { $from } = state.selection;
+  const { bullet_list, ordered_list } = state.schema.nodes;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    const node = $from.node(depth);
+    if (node.type === bullet_list || node.type === ordered_list) {
+      return { type: node.type, pos: $from.before(depth) };
+    }
+  }
+  return null;
+};
+
+// A single command that lets the toolbar button behave like an on/off toggle,
+// mirroring the mark buttons:
+//   - not in a list          -> wrap the selection in `listType`
+//   - already in `listType`  -> lift the item out (turn the list off)
+//   - in a different list     -> convert the innermost list to `listType`
+// Indentation/nesting stays on Tab / Shift-Tab (see keymap.js), so the button
+// no longer creates a new nesting level on every click.
+const toggleList = (listType, itemType, attrs) => (state, dispatch, view) => {
+  const info = parentListInfo(state);
+  if (!info) {
+    return wrapInList(listType, attrs)(state, dispatch, view);
+  }
+  if (info.type === listType) {
+    return liftListItem(itemType)(state, dispatch);
+  }
+  if (dispatch) {
+    dispatch(state.tr.setNodeMarkup(info.pos, listType).scrollIntoView());
+  }
+  return true;
+};
+
+// Build a toolbar MenuItem for a list type. Uses `enable`/`active` (never
+// `select`) so the button always stays visible: greyed out when it can't run
+// and highlighted while the selection sits inside a list of this type.
+const toggleListItem = (listType, options) => {
+  const command = (state, dispatch, view) =>
+    toggleList(listType, state.schema.nodes.list_item, options.attrs)(
+      state,
+      dispatch,
+      view
+    );
+  return new MenuItem({
+    ...options,
+    label: options.title,
+    run: command,
+    enable: (state) => command(state),
+    active: (state) => {
+      const info = parentListInfo(state);
+      return info != null && info.type === listType;
+    },
+  });
+};
 
 const imageUploadItem = (nodeType, onImageUpload, t) =>
   new MenuItem({
@@ -881,19 +934,19 @@ const buildMenuOptions = (
       icon: icons.code,
     }),
     link: linkItem(schema.marks.link, t),
-    bulletList: wrapListItem(schema.nodes.bullet_list, {
+    bulletList: toggleListItem(schema.nodes.bullet_list, {
       title: tr(
         t,
         "CONVERSATION.REPLYBOX.EDITOR.BULLET_LIST",
-        "Wrap in bullet list"
+        "Toggle bullet list"
       ),
       icon: icons.bulletList,
     }),
-    orderedList: wrapListItem(schema.nodes.ordered_list, {
+    orderedList: toggleListItem(schema.nodes.ordered_list, {
       title: tr(
         t,
         "CONVERSATION.REPLYBOX.EDITOR.ORDERED_LIST",
-        "Wrap in ordered list"
+        "Toggle ordered list"
       ),
       icon: icons.orderedList,
     }),
