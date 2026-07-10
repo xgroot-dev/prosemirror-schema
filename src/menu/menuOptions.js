@@ -1,5 +1,6 @@
 import { wrapInList, liftListItem } from "prosemirror-schema-list";
-import { toggleMark, setBlockType } from "prosemirror-commands";
+import { toggleMark, setBlockType, wrapIn } from "prosemirror-commands";
+import { liftTarget } from "prosemirror-transform";
 import { MenuItem } from "prosemirror-menu";
 import { undo, redo } from "prosemirror-history";
 import { openPrompt } from "../prompt";
@@ -39,6 +40,19 @@ const parentListInfo = (state) => {
     if (node.type === bullet_list || node.type === ordered_list) {
       return { type: node.type, pos: $from.before(depth) };
     }
+  }
+  return null;
+};
+
+// Depth of the nearest blockquote ancestor of the selection, or null when the
+// selection is not inside one. Returns the innermost match, which is the one
+// the unwrap command targets. (common.js's blockTypeIsActive would return the
+// outermost, so `active` and `run` would disagree on nested quotes.)
+const parentBlockquoteDepth = (state) => {
+  const { $from } = state.selection;
+  const { blockquote } = state.schema.nodes;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    if ($from.node(depth).type === blockquote) return depth;
   }
   return null;
 };
@@ -83,6 +97,40 @@ const toggleListItem = (listType, options) => {
       const info = parentListInfo(state);
       return info != null && info.type === listType;
     },
+  });
+};
+
+// A single on/off toggle, mirroring toggleList:
+//   - not in a blockquote -> wrap the selection
+//   - already in one      -> lift the blockquote's own children up one level,
+//                            which removes the wrapper.
+// The blockRange predicate pins the range's parent to the blockquote, so
+// liftTarget lifts the blockquote's children — never an intervening list_item.
+// Without it, a caret inside a list-inside-a-quote would outdent the list.
+const toggleBlockquote = (blockquoteType) => (state, dispatch, view) => {
+  if (parentBlockquoteDepth(state) == null) {
+    return wrapIn(blockquoteType)(state, dispatch, view);
+  }
+  const { $from, $to } = state.selection;
+  const range = $from.blockRange($to, (node) => node.type === blockquoteType);
+  const target = range && liftTarget(range);
+  if (target == null) return false;
+  if (dispatch) dispatch(state.tr.lift(range, target).scrollIntoView());
+  return true;
+};
+
+// Uses `enable`/`active` (never `select`) so the button always stays visible:
+// greyed out when neither wrap nor unwrap is possible, highlighted while the
+// selection sits inside a blockquote. `enable` dry-runs the command with no
+// dispatch, exactly like toggleListItem.
+const blockquoteItem = (blockquoteType, options) => {
+  const command = toggleBlockquote(blockquoteType);
+  return new MenuItem({
+    ...options,
+    label: options.title,
+    run: command,
+    enable: (state) => command(state),
+    active: (state) => parentBlockquoteDepth(state) != null,
   });
 };
 
@@ -950,6 +998,12 @@ const buildMenuOptions = (
       ),
       icon: icons.orderedList,
     }),
+    blockquote: schema.nodes.blockquote
+      ? blockquoteItem(schema.nodes.blockquote, {
+          title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.BLOCKQUOTE", "Blockquote"),
+          icon: icons.blockquote,
+        })
+      : null,
     undo: new MenuItem({
       title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.UNDO", "Undo last change"),
       run: undo,
