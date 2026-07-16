@@ -1,5 +1,6 @@
 import { inputRules, wrappingInputRule } from 'prosemirror-inputrules';
 import { Fragment, Slice } from 'prosemirror-model';
+import { canSplit } from 'prosemirror-transform';
 
 import {
   createInputRule as defaultCreateInputRule,
@@ -278,6 +279,13 @@ export function splitListItem(itemType) {
         : undefined;
     const tr = state.tr.delete($from.pos, $to.pos);
     const types = nextType && [undefined, { type: nextType }];
+
+    // Guard from upstream prosemirror-schema-list: bail out instead of
+    // throwing when the surrounding structure can't be split into valid
+    // list items (e.g. a corrupt list_item produced by a paste).
+    if (!canSplit(tr.doc, $from.pos, 2, types)) {
+      return false;
+    }
 
     if (dispatch) {
       dispatch(tr.split($from.pos, 2, types).scrollIntoView());
