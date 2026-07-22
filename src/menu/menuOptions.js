@@ -1,5 +1,5 @@
 import { wrapInList, liftListItem } from "prosemirror-schema-list";
-import { toggleMark, setBlockType, wrapIn } from "prosemirror-commands";
+import { setBlockType, wrapIn } from "prosemirror-commands";
 import { liftTarget } from "prosemirror-transform";
 import { MenuItem } from "prosemirror-menu";
 import { undo, redo } from "prosemirror-history";
@@ -282,6 +282,42 @@ const headerItem = (nodeType, options) => {
   });
 };
 
+// Full document range of the link mark covering the selection's $from, plus the
+// mark itself — or null when the cursor isn't inside a link. Lets the link button
+// edit an existing link from just a cursor (no selection needed). Canonical
+// getMarkRange: find the text node under the cursor that carries the mark, then
+// extend left/right across adjacent nodes sharing the identical mark.
+const getLinkRange = (state, markType) => {
+  const { $from } = state.selection;
+  const parent = $from.parent;
+  let start = parent.childAfter($from.parentOffset);
+  // At the trailing boundary childAfter is the following (non-link) node; the
+  // link is the node just before the cursor instead.
+  if (!start.node || !markType.isInSet(start.node.marks)) {
+    start = parent.childBefore($from.parentOffset);
+  }
+  if (!start.node) return null;
+  const mark = markType.isInSet(start.node.marks);
+  if (!mark) return null;
+
+  let startIndex = start.index;
+  let startPos = $from.start() + start.offset;
+  let endIndex = startIndex + 1;
+  let endPos = startPos + start.node.nodeSize;
+  while (startIndex > 0 && mark.isInSet(parent.child(startIndex - 1).marks)) {
+    startIndex -= 1;
+    startPos -= parent.child(startIndex).nodeSize;
+  }
+  while (
+    endIndex < parent.childCount &&
+    mark.isInSet(parent.child(endIndex).marks)
+  ) {
+    endPos += parent.child(endIndex).nodeSize;
+    endIndex += 1;
+  }
+  return { from: startPos, to: endPos, mark };
+};
+
 const linkItem = (markType, t) =>
   new MenuItem({
     title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.LINK", "Add or remove link"),
@@ -290,13 +326,21 @@ const linkItem = (markType, t) =>
       return markActive(state, markType);
     },
     enable(state) {
-      return !state.selection.empty;
+      // Clickable with a selection (create) OR when the cursor sits inside an
+      // existing link (edit/remove), even with no selection.
+      return !state.selection.empty || markActive(state, markType);
     },
     run(state, dispatch, view) {
-      if (markActive(state, markType)) {
-        toggleMark(markType)(state, dispatch);
-        return true;
-      }
+      // Existing link under the cursor/selection -> edit its full span; otherwise
+      // create over the current selection. The range is captured NOW and used in
+      // the callback so the applied mark doesn't depend on the live selection,
+      // which the anchor dropdown (or any click) can collapse before submit.
+      const linkRange = getLinkRange(state, markType);
+      const range = linkRange
+        ? { from: linkRange.from, to: linkRange.to }
+        : { from: state.selection.from, to: state.selection.to };
+      const initialHref = linkRange ? linkRange.mark.attrs.href || "" : "";
+
       // Anchors defined in the doc power the href autocomplete. Empty on schemas
       // without an anchor node (e.g. the message editor), where the field then
       // behaves as a plain text input.
@@ -321,12 +365,22 @@ const linkItem = (markType, t) =>
               "https://example.com"
             ),
             class: "small",
-            required: true,
+            value: initialHref,
+            // When editing, an empty href removes the link; only require a value
+            // when creating a brand-new one.
+            required: !linkRange,
             anchors,
           }),
         },
         callback(attrs) {
-          toggleMark(markType, attrs)(view.state, view.dispatch);
+          const tr = view.state.tr;
+          // Replace any existing link across the range, then apply the new href
+          // (skipped when cleared, which just removes the link).
+          tr.removeMark(range.from, range.to, markType);
+          if (attrs.href) {
+            tr.addMark(range.from, range.to, markType.create(attrs));
+          }
+          view.dispatch(tr);
           view.focus();
         },
       });
