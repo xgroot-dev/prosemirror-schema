@@ -65,11 +65,28 @@ export class AnchorLinkField extends Field {
     const choose = name => {
       input.value = `#${name}`;
       hide();
-      input.focus();
+      // Submit the prompt straight away so a single click (or Enter) on an anchor
+      // creates/updates the link — no separate "Create Link" click needed.
+      // requestSubmit runs the prompt's own submit handler + validation; fall back
+      // to clicking the submit button on older engines.
+      const form = input.closest('form');
+      if (form && typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+      } else if (form) {
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.click();
+        else input.focus();
+      } else {
+        input.focus();
+      }
     };
 
     const refresh = () => {
-      if (isUrlLike(input.value)) {
+      // Only surface the dropdown once the user has actually typed something that
+      // isn't a URL — nothing on an empty field (i.e. not on plain focus). Typing
+      // just "#" (empty search term) lists every anchor.
+      const raw = input.value.trim();
+      if (!raw || isUrlLike(input.value)) {
         hide();
         return;
       }
@@ -86,10 +103,15 @@ export class AnchorLinkField extends Field {
         const li = document.createElement('li');
         li.className = 'cw-anchor-suggestion';
         li.textContent = `#${name}`;
-        // mousedown (not click) + preventDefault keeps focus on the input so the
-        // prompt doesn't treat it as a blur/outside interaction.
+        // mousedown (not click): preventDefault keeps focus on the input;
+        // stopPropagation stops the event reaching openPrompt's window-level
+        // "click outside to close" handler. That matters because choose() ->
+        // hide() detaches this <li> synchronously, so by the time the window
+        // handler ran it would see a target no longer inside the prompt wrapper
+        // and wrongly close it.
         li.addEventListener('mousedown', e => {
           e.preventDefault();
+          e.stopPropagation();
           choose(name);
         });
         li.addEventListener('mouseenter', () => {
@@ -103,8 +125,9 @@ export class AnchorLinkField extends Field {
       list.style.display = 'block';
     };
 
+    // Only on typing — not on focus — so an empty/pre-filled field stays quiet
+    // until the user starts typing.
     input.addEventListener('input', refresh);
-    input.addEventListener('focus', refresh);
 
     input.addEventListener('keydown', e => {
       const isOpen = list.style.display !== 'none';
