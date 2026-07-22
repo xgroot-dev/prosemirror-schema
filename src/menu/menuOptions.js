@@ -5,6 +5,7 @@ import { MenuItem } from "prosemirror-menu";
 import { undo, redo } from "prosemirror-history";
 import { openPrompt } from "../prompt";
 import { TextField } from "../TextField";
+import { AnchorLinkField } from "../AnchorLinkField";
 import {
   blockTypeIsActive,
   markItem,
@@ -12,6 +13,29 @@ import {
 } from "./common";
 import icons from "../icons";
 import { markActive } from "../utils";
+
+// Slugify text into an anchor name: unaccent, lowercase, kebab-case, ASCII only.
+// Matches the [a-z0-9-] shape the article serializer + backend renderer accept.
+const slugifyAnchor = (text) =>
+  (text || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+
+// Collect the unique names of every anchor node in the document, for the link
+// prompt's autocomplete.
+const collectAnchorNames = (doc) => {
+  const names = [];
+  doc.descendants((node) => {
+    if (node.type.name === "anchor" && node.attrs.name) {
+      names.push(node.attrs.name);
+    }
+  });
+  return [...new Set(names)];
+};
 
 // Resolve a translation key with English fallback. `t` follows vue-i18n's
 // behaviour of returning the key when no translation is registered.
@@ -174,6 +198,65 @@ const htmlEmbedItem = (onHtmlEmbed, t) =>
     },
   });
 
+// In-toolbar button that drops an empty named anchor (a #jump target) at the
+// cursor, or at the start of the current selection. Opens a prompt for the name,
+// pre-filled with a slug of the selected text. Self-contained: the node is
+// inserted straight into the view, no host callback needed.
+const anchorItem = (nodeType, t) =>
+  new MenuItem({
+    title: tr(
+      t,
+      "HELP_CENTER.ARTICLE_EDITOR.ANCHOR.BUTTON",
+      "Insert anchor"
+    ),
+    icon: icons.anchor,
+    enable() {
+      // Works with or without a selection (cursor insert vs. selection start).
+      return true;
+    },
+    run(state, dispatch, view) {
+      const { from, to } = state.selection;
+      const selectedText = state.doc.textBetween(from, to, " ", " ");
+      openPrompt({
+        title: tr(
+          t,
+          "HELP_CENTER.ARTICLE_EDITOR.ANCHOR.TITLE",
+          "Insert anchor"
+        ),
+        submitLabel: tr(
+          t,
+          "HELP_CENTER.ARTICLE_EDITOR.ANCHOR.SUBMIT",
+          "Insert"
+        ),
+        cancelLabel: tr(t, "CONVERSATION.REPLYBOX.EDITOR.CANCEL", "Cancel"),
+        fields: {
+          name: new TextField({
+            label: tr(
+              t,
+              "HELP_CENTER.ARTICLE_EDITOR.ANCHOR.PLACEHOLDER",
+              "anchor-name"
+            ),
+            class: "small",
+            value: slugifyAnchor(selectedText),
+            required: true,
+            clean: slugifyAnchor,
+          }),
+        },
+        callback(attrs) {
+          const name = slugifyAnchor(attrs.name);
+          if (!name) return;
+          // Insert at the start of the (remembered) range so the anchor sits at
+          // the beginning of the referenced text. The prompt didn't touch the
+          // doc, so `from` is still a valid position in view.state.doc.
+          const node = nodeType.create({ name });
+          view.dispatch(view.state.tr.insert(from, node).scrollIntoView());
+          view.focus();
+        },
+      });
+      return false;
+    },
+  });
+
 const headerItem = (nodeType, options) => {
   const { level = 1 } = options;
   return new MenuItem({
@@ -214,6 +297,10 @@ const linkItem = (markType, t) =>
         toggleMark(markType)(state, dispatch);
         return true;
       }
+      // Anchors defined in the doc power the href autocomplete. Empty on schemas
+      // without an anchor node (e.g. the message editor), where the field then
+      // behaves as a plain text input.
+      const anchors = collectAnchorNames(state.doc);
       openPrompt({
         title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.CREATE_LINK", "Create a link"),
         submitLabel: tr(
@@ -227,7 +314,7 @@ const linkItem = (markType, t) =>
           "Cancel"
         ),
         fields: {
-          href: new TextField({
+          href: new AnchorLinkField({
             label: tr(
               t,
               "CONVERSATION.REPLYBOX.EDITOR.LINK_PLACEHOLDER",
@@ -235,6 +322,7 @@ const linkItem = (markType, t) =>
             ),
             class: "small",
             required: true,
+            anchors,
           }),
         },
         callback(attrs) {
@@ -1040,6 +1128,8 @@ const buildMenuOptions = (
     htmlEmbed: schema.nodes.html_embed
       ? htmlEmbedItem(onHtmlEmbed, t)
       : null,
+    // Only available on schemas that define the anchor node (article schema).
+    anchor: schema.nodes.anchor ? anchorItem(schema.nodes.anchor, t) : null,
   };
 
   return [

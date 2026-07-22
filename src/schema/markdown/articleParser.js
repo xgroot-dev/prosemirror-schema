@@ -51,6 +51,11 @@ export const articleMdToPmMapping = {
     node: 'html_embed',
     getAttrs: tok => ({ html: tok.content }),
   },
+  // Inline named anchor produced by the styled_html_inline core rule below.
+  anchor: {
+    node: 'anchor',
+    getAttrs: tok => ({ name: tok.content }),
+  },
 };
 
 // `html: true` so inline `<u>` / `<span style="…">` survive tokenisation as
@@ -80,6 +85,13 @@ const OPEN_U_RE = /^<u(\s[^>]*)?>$/i;
 const CLOSE_U_RE = /^<\/u\s*>$/i;
 const OPEN_SPAN_RE = /^<span\s+style\s*=\s*"([^"]*)"\s*>$/i;
 const CLOSE_SPAN_RE = /^<\/span\s*>$/i;
+// Empty inline anchor: <a id="…" class="cw-anchor"> … </a> (attribute order
+// independent). The `id` is the anchor name; restricted to slug chars so no
+// arbitrary markup slips through.
+const OPEN_ANCHOR_RE =
+  /^<a\s+[^>]*class\s*=\s*"[^"]*\bcw-anchor\b[^"]*"[^>]*>$/i;
+const ANCHOR_ID_RE = /\bid\s*=\s*"([a-zA-Z0-9_-]*)"/i;
+const CLOSE_ANCHOR_RE = /^<\/a\s*>$/i;
 
 // Single style on the opening span -> single mark. The serializer nests a
 // separate span per mark, so each opening tag carries exactly one declaration.
@@ -111,9 +123,24 @@ md.core.ruler.after('inline', 'styled_html_inline', state => {
     if (blockToken.type !== 'inline' || !blockToken.children) return;
     const next = [];
     const openStack = []; // pushed when we open a styled span; popped on close
+    let pendingAnchorClose = false; // set after an anchor open, cleared on its </a>
     blockToken.children.forEach(token => {
       if (token.type !== 'html_inline') {
         next.push(token);
+        return;
+      }
+      // Empty inline anchor <a id="…" class="cw-anchor"></a> -> one atom node
+      // token; the paired </a> that immediately follows is swallowed.
+      if (OPEN_ANCHOR_RE.test(token.content)) {
+        const idMatch = ANCHOR_ID_RE.exec(token.content);
+        const anchorTok = new state.Token('anchor', 'a', 0);
+        anchorTok.content = idMatch ? idMatch[1] : '';
+        next.push(anchorTok);
+        pendingAnchorClose = true;
+        return;
+      }
+      if (CLOSE_ANCHOR_RE.test(token.content) && pendingAnchorClose) {
+        pendingAnchorClose = false;
         return;
       }
       if (OPEN_U_RE.test(token.content)) {
