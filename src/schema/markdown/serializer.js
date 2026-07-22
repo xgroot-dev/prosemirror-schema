@@ -106,6 +106,16 @@ export const html_embed = (state, node) => {
   state.write(`<div class="html-embed">${node.attrs.html}</div>`);
   state.closeBlock(node);
 };
+// Inline named anchor -> an empty <a id="…" class="cw-anchor"> tag. The name is
+// a slug ([a-z0-9-]) produced by the toolbar button, so it needs no escaping.
+// The backend renderer (lib/chatwoot_markdown_renderer.rb) whitelists exactly
+// this shape so it survives CommonMarker's raw-HTML stripping and becomes an
+// in-page jump target on the published portal; the styled_html_inline core rule
+// in markdown/articleParser.js turns it back into an anchor node on re-parse.
+export const anchor = (state, node) => {
+  const name = (node.attrs.name || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  state.write(`<a id="${name}" class="cw-anchor"></a>`);
+};
 
 export const em = {
   open: '*',

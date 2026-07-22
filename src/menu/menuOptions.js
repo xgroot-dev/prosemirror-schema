@@ -1,10 +1,11 @@
 import { wrapInList, liftListItem } from "prosemirror-schema-list";
-import { toggleMark, setBlockType, wrapIn } from "prosemirror-commands";
+import { setBlockType, wrapIn } from "prosemirror-commands";
 import { liftTarget } from "prosemirror-transform";
 import { MenuItem } from "prosemirror-menu";
 import { undo, redo } from "prosemirror-history";
 import { openPrompt } from "../prompt";
 import { TextField } from "../TextField";
+import { AnchorLinkField } from "../AnchorLinkField";
 import {
   blockTypeIsActive,
   markItem,
@@ -12,6 +13,29 @@ import {
 } from "./common";
 import icons from "../icons";
 import { markActive } from "../utils";
+
+// Slugify text into an anchor name: unaccent, lowercase, kebab-case, ASCII only.
+// Matches the [a-z0-9-] shape the article serializer + backend renderer accept.
+const slugifyAnchor = (text) =>
+  (text || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+
+// Collect the unique names of every anchor node in the document, for the link
+// prompt's autocomplete.
+const collectAnchorNames = (doc) => {
+  const names = [];
+  doc.descendants((node) => {
+    if (node.type.name === "anchor" && node.attrs.name) {
+      names.push(node.attrs.name);
+    }
+  });
+  return [...new Set(names)];
+};
 
 // Resolve a translation key with English fallback. `t` follows vue-i18n's
 // behaviour of returning the key when no translation is registered.
@@ -174,6 +198,65 @@ const htmlEmbedItem = (onHtmlEmbed, t) =>
     },
   });
 
+// In-toolbar button that drops an empty named anchor (a #jump target) at the
+// cursor, or at the start of the current selection. Opens a prompt for the name,
+// pre-filled with a slug of the selected text. Self-contained: the node is
+// inserted straight into the view, no host callback needed.
+const anchorItem = (nodeType, t) =>
+  new MenuItem({
+    title: tr(
+      t,
+      "HELP_CENTER.ARTICLE_EDITOR.ANCHOR.BUTTON",
+      "Insert anchor"
+    ),
+    icon: icons.anchor,
+    enable() {
+      // Works with or without a selection (cursor insert vs. selection start).
+      return true;
+    },
+    run(state, dispatch, view) {
+      const { from, to } = state.selection;
+      const selectedText = state.doc.textBetween(from, to, " ", " ");
+      openPrompt({
+        title: tr(
+          t,
+          "HELP_CENTER.ARTICLE_EDITOR.ANCHOR.TITLE",
+          "Insert anchor"
+        ),
+        submitLabel: tr(
+          t,
+          "HELP_CENTER.ARTICLE_EDITOR.ANCHOR.SUBMIT",
+          "Insert"
+        ),
+        cancelLabel: tr(t, "CONVERSATION.REPLYBOX.EDITOR.CANCEL", "Cancel"),
+        fields: {
+          name: new TextField({
+            label: tr(
+              t,
+              "HELP_CENTER.ARTICLE_EDITOR.ANCHOR.PLACEHOLDER",
+              "anchor-name"
+            ),
+            class: "small",
+            value: slugifyAnchor(selectedText),
+            required: true,
+            clean: slugifyAnchor,
+          }),
+        },
+        callback(attrs) {
+          const name = slugifyAnchor(attrs.name);
+          if (!name) return;
+          // Insert at the start of the (remembered) range so the anchor sits at
+          // the beginning of the referenced text. The prompt didn't touch the
+          // doc, so `from` is still a valid position in view.state.doc.
+          const node = nodeType.create({ name });
+          view.dispatch(view.state.tr.insert(from, node).scrollIntoView());
+          view.focus();
+        },
+      });
+      return false;
+    },
+  });
+
 const headerItem = (nodeType, options) => {
   const { level = 1 } = options;
   return new MenuItem({
@@ -199,6 +282,42 @@ const headerItem = (nodeType, options) => {
   });
 };
 
+// Full document range of the link mark covering the selection's $from, plus the
+// mark itself — or null when the cursor isn't inside a link. Lets the link button
+// edit an existing link from just a cursor (no selection needed). Canonical
+// getMarkRange: find the text node under the cursor that carries the mark, then
+// extend left/right across adjacent nodes sharing the identical mark.
+const getLinkRange = (state, markType) => {
+  const { $from } = state.selection;
+  const parent = $from.parent;
+  let start = parent.childAfter($from.parentOffset);
+  // At the trailing boundary childAfter is the following (non-link) node; the
+  // link is the node just before the cursor instead.
+  if (!start.node || !markType.isInSet(start.node.marks)) {
+    start = parent.childBefore($from.parentOffset);
+  }
+  if (!start.node) return null;
+  const mark = markType.isInSet(start.node.marks);
+  if (!mark) return null;
+
+  let startIndex = start.index;
+  let startPos = $from.start() + start.offset;
+  let endIndex = startIndex + 1;
+  let endPos = startPos + start.node.nodeSize;
+  while (startIndex > 0 && mark.isInSet(parent.child(startIndex - 1).marks)) {
+    startIndex -= 1;
+    startPos -= parent.child(startIndex).nodeSize;
+  }
+  while (
+    endIndex < parent.childCount &&
+    mark.isInSet(parent.child(endIndex).marks)
+  ) {
+    endPos += parent.child(endIndex).nodeSize;
+    endIndex += 1;
+  }
+  return { from: startPos, to: endPos, mark };
+};
+
 const linkItem = (markType, t) =>
   new MenuItem({
     title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.LINK", "Add or remove link"),
@@ -207,13 +326,25 @@ const linkItem = (markType, t) =>
       return markActive(state, markType);
     },
     enable(state) {
-      return !state.selection.empty;
+      // Clickable with a selection (create) OR when the cursor sits inside an
+      // existing link (edit/remove), even with no selection.
+      return !state.selection.empty || markActive(state, markType);
     },
     run(state, dispatch, view) {
-      if (markActive(state, markType)) {
-        toggleMark(markType)(state, dispatch);
-        return true;
-      }
+      // Existing link under the cursor/selection -> edit its full span; otherwise
+      // create over the current selection. The range is captured NOW and used in
+      // the callback so the applied mark doesn't depend on the live selection,
+      // which the anchor dropdown (or any click) can collapse before submit.
+      const linkRange = getLinkRange(state, markType);
+      const range = linkRange
+        ? { from: linkRange.from, to: linkRange.to }
+        : { from: state.selection.from, to: state.selection.to };
+      const initialHref = linkRange ? linkRange.mark.attrs.href || "" : "";
+
+      // Anchors defined in the doc power the href autocomplete. Empty on schemas
+      // without an anchor node (e.g. the message editor), where the field then
+      // behaves as a plain text input.
+      const anchors = collectAnchorNames(state.doc);
       openPrompt({
         title: tr(t, "CONVERSATION.REPLYBOX.EDITOR.CREATE_LINK", "Create a link"),
         submitLabel: tr(
@@ -227,18 +358,29 @@ const linkItem = (markType, t) =>
           "Cancel"
         ),
         fields: {
-          href: new TextField({
+          href: new AnchorLinkField({
             label: tr(
               t,
               "CONVERSATION.REPLYBOX.EDITOR.LINK_PLACEHOLDER",
               "https://example.com"
             ),
             class: "small",
-            required: true,
+            value: initialHref,
+            // When editing, an empty href removes the link; only require a value
+            // when creating a brand-new one.
+            required: !linkRange,
+            anchors,
           }),
         },
         callback(attrs) {
-          toggleMark(markType, attrs)(view.state, view.dispatch);
+          const tr = view.state.tr;
+          // Replace any existing link across the range, then apply the new href
+          // (skipped when cleared, which just removes the link).
+          tr.removeMark(range.from, range.to, markType);
+          if (attrs.href) {
+            tr.addMark(range.from, range.to, markType.create(attrs));
+          }
+          view.dispatch(tr);
           view.focus();
         },
       });
@@ -1040,6 +1182,8 @@ const buildMenuOptions = (
     htmlEmbed: schema.nodes.html_embed
       ? htmlEmbedItem(onHtmlEmbed, t)
       : null,
+    // Only available on schemas that define the anchor node (article schema).
+    anchor: schema.nodes.anchor ? anchorItem(schema.nodes.anchor, t) : null,
   };
 
   return [

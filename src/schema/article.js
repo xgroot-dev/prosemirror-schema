@@ -79,6 +79,33 @@ export const fullSchema = new Schema({
       // instead of a live, rendered embed inside the editor.
       toDOM: node => ['div', { class: 'html-embed' }, node.attrs.html],
     },
+    // Inline named anchor: an empty, atomic jump target the author drops at the
+    // cursor (or in front of a selection) so links can point to `#<name>` inside
+    // the article. Persisted to markdown as an empty <a id="…" class="cw-anchor">
+    // tag (see markdown/serializer.js) and round-tripped back by the
+    // styled_html_inline core rule in markdown/articleParser.js. In the editor it
+    // shows as a small pill (CSS ::after on data-anchor); on the published portal
+    // it renders as an invisible in-page target (the id).
+    anchor: {
+      inline: true,
+      group: 'inline',
+      atom: true,
+      selectable: true,
+      draggable: false,
+      attrs: { name: { default: '' } },
+      parseDOM: [
+        {
+          tag: 'a.cw-anchor',
+          getAttrs: dom => ({
+            name: dom.getAttribute('data-anchor') || dom.getAttribute('id') || '',
+          }),
+        },
+      ],
+      toDOM: node => [
+        'a',
+        { class: 'cw-anchor', 'data-anchor': node.attrs.name },
+      ],
+    },
   },
   marks: {
     link: schema.spec.marks.get('link'),

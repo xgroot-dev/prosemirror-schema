@@ -14,6 +14,7 @@ import {
   text,
   internal_note,
   html_embed,
+  anchor,
   em,
   superscript,
   strike,
@@ -40,6 +41,7 @@ export const ArticleMarkdownSerializer = new MarkdownSerializerBase(
     text,
     internal_note,
     html_embed,
+    anchor,
   },
   {
     em,
