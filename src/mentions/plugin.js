@@ -14,6 +14,12 @@ import { Decoration, DecorationSet } from 'prosemirror-view';
  * @returns {Function} A function that takes a position object and returns the match if the condition is met.
  */
 export const triggerCharacters = (char, minChars = 0) => $position => {
+  // The gap cursor puts a collapsed selection outside a textblock, for example
+  // next to a horizontal rule or a table at the top level of the document.
+  // There is no text to search at such a position, and `$position.before()`
+  // throws a RangeError when the position is at the top level.
+  if (!$position.parent.isTextblock) return null;
+
   // Regular expression to find occurrences of 'char' followed by at least 'minChars' non-space characters.
   // It matches these sequences starting from the beginning of the text or after a space.
   const regexp = new RegExp(`(?:^)?${char}[^\\s${char}]{${minChars},}`, 'g');
